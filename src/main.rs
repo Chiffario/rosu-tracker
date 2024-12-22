@@ -1,64 +1,63 @@
-use futures_util::{future, SinkExt, StreamExt, TryStreamExt};
+use futures_util::{SinkExt, StreamExt};
 use rosu_v2::prelude::*;
 use serde::Deserialize;
 use std::sync::Arc;
-use std::{borrow::Borrow, fs::File, io::Read, thread, time::Duration};
+use std::{fs::File, io::read_to_string, thread, time::Duration};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::Mutex;
 use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::Message;
 
-#[derive(Deserialize)]
+mod websocket;
+use websocket::accept_connection;
+#[derive(Deserialize, Clone)]
 struct Api {
     id: String,
     secret: String,
+    port: String,
+    username: String,
+}
+#[derive(Clone)]
+struct TrackedData {
+    user_extended: UserExtended,
+    user_scores: Vec<Score>,
+    user_firsts: Vec<Score>,
+    // TODO: Add scorefarm api
 }
 #[tokio::main]
 async fn main() {
-    let mut buf = String::new();
-    let config = File::open("config.toml").unwrap().read_to_string(&mut buf);
-    let api_conf: Api = toml::from_str(&buf).unwrap();
+    let config = read_to_string(File::open("config.toml").unwrap()).unwrap();
+    let api_conf: Api = toml::from_str(&config).unwrap();
 
-    let osu = Osu::new(api_conf.id.parse().unwrap(), api_conf.secret)
-        .await
-        .unwrap();
+    let osu = Arc::new(
+        Osu::new(api_conf.id.parse().unwrap(), &api_conf.secret)
+            .await
+            .unwrap(),
+    );
 
-    let osu_ptr = Arc::new(osu);
+    let initial_data = Arc::new(TrackedData {
+        user_extended: osu.user(&api_conf.username).await.unwrap(),
+        user_scores: osu.user_scores(&api_conf.username).await.unwrap(),
+        user_firsts: osu.user_scores(&api_conf.username).firsts().await.unwrap(),
+    });
 
-    let addr = "127.0.0.1:7272".to_string();
+    let tracked_data: Arc<Mutex<TrackedData>> = Arc::new(Mutex::new(TrackedData {
+        user_extended: initial_data.user_extended.clone(),
+        user_scores: initial_data.user_scores.clone(),
+        user_firsts: initial_data.user_firsts.clone(),
+    }));
+
+    let addr = format!("127.0.0.1:{}", api_conf.port).to_string();
     let try_socket = TcpListener::bind(&addr).await;
     let listener = try_socket.expect("Failed to bind");
 
     while let Ok((stream, _)) = listener.accept().await {
-        let ptr = osu_ptr.clone();
+        let ptr = osu.clone();
+        let initial_data_ref = initial_data.clone();
+        let tracked_data_ref = tracked_data.clone();
+        let config = api_conf.clone();
         tokio::spawn(async {
-            accept_connection(stream, ptr).await;
+            accept_connection(stream, ptr, initial_data_ref, tracked_data_ref, config).await;
         });
-    }
-}
-
-async fn accept_connection(stream: TcpStream, osu: Arc<Osu>) {
-    let addr = stream
-        .peer_addr()
-        .expect("Connected streams should have a peer address");
-    let ws_stream = accept_async(stream).await.expect("Error during handshake");
-
-    let (mut write, read) = ws_stream.split();
-    let scores: Vec<Score> = osu
-        .user_scores("Chiffa")
-        .mode(GameMode::Osu)
-        .best()
-        .await
-        .unwrap();
-    loop {
-        let w = write
-            .send(Message::Text(serde_json::to_string(&scores).unwrap()))
-            .await;
-        match w {
-            Ok(wr) => thread::sleep(Duration::from_secs(1)),
-            Err(e) => {
-                eprintln!("{e}");
-                break;
-            }
-        }
     }
 }
