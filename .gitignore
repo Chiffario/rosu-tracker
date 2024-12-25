@@ -22,3 +22,4 @@ Cargo.lock
 
 # Config.toml has your osu api key, don't fuck it up
 config.toml
+test/
