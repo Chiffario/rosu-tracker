@@ -24,8 +24,11 @@ use structs::*;
 
 #[tracing::instrument(name = "handle_clients", skip_all)]
 pub async fn handle_clients(clients: Clients, values: Arm<TrackedData>) {
+    let lock = values.lock().await;
+    if lock.user_extended.is_none() {
+        return;
+    }
     let (ser_profile, ser_tops, ser_firsts) = {
-        let lock = values.lock().await;
         let data = &*lock;
         (
             serde_json::to_string(&data.user_extended).unwrap(),
@@ -69,6 +72,7 @@ pub async fn handle_clients(clients: Clients, values: Arm<TrackedData>) {
             true
         })
     });
+    tokio::time::sleep(Duration::from_secs(3)).await;
 }
 #[tracing::instrument(name = "server_thread")]
 pub async fn server_thread(ctx_clients: Clients, values: Arm<TrackedData>) {
@@ -87,8 +91,9 @@ pub async fn server_thread(ctx_clients: Clients, values: Arm<TrackedData>) {
         println!("server_thread: service constructed");
         let service = service_fn(move |req| {
             let ctx_clients = ctx_clients.clone();
-            let ctx_values = ctx_values.clone();
-            serve(ctx_clients, ctx_values, req)
+            // let ctx_values = ctx_values.clone();
+            // serve(ctx_clients, ctx_values, req)
+            serve(ctx_clients, req)
         });
         println!("start building http clients");
         tokio::spawn(async {
@@ -102,57 +107,40 @@ pub async fn server_thread(ctx_clients: Clients, values: Arm<TrackedData>) {
         });
     }
 }
-#[tracing::instrument(
-    name = "fetch_thread",
-    skip(osu, api_conf, _initial_data, tracked_data)
-)]
-pub async fn fetch_thread(
-    osu: Arc<Osu>,
-    _initial_data: Arc<TrackedData>,
-    tracked_data: Arm<TrackedData>,
-    api_conf: Api,
-) {
+#[tracing::instrument(name = "fetch_thread", skip(osu, api_conf, tracked_data))]
+pub async fn fetch_thread(osu: Arc<Osu>, tracked_data: Arm<TrackedData>, api_conf: Api) {
     println!("websockets::fetch_thread()");
     loop {
-        let user = osu.user(&api_conf.username).await;
-        match &user {
+        let fetched_user = osu.user(&api_conf.username).await;
+        match &fetched_user {
             Ok(u) => println!("Fetched user: {}", u.username),
             Err(e) => eprintln!("Error: {e}"),
         };
-        let user = user.unwrap();
+        let fetched_user = fetched_user.unwrap();
 
-        let mut tracked = tracked_data.lock().await;
-        // TODO: User comparisons are apparently unreliable!
-        if &user != tracked.user_extended.as_ref().unwrap() {
-            println!("Different data!");
-            if user.statistics.as_ref().unwrap().pp
-                != tracked
-                    .user_extended
-                    .as_ref()
-                    .unwrap()
-                    .statistics
-                    .as_ref()
-                    .unwrap()
-                    .pp
-            {
-                let new_tops = osu.user_scores(&api_conf.username).await.unwrap();
-                tracked.user_scores.replace(new_tops);
+        let mut tracked_data = tracked_data.lock().await;
+        if let Some(ref tracked_data_user) = tracked_data.user_extended {
+            if tracked_data_user.statistics != fetched_user.statistics {
+                tracing::debug!("User data changed, fetching new data");
+                let fetched_tops = osu.user_scores(&api_conf.username).await;
+                tracked_data.user_scores =
+                    fetched_tops.inspect_err(|e| tracing::error!("{e}")).ok();
+
+                let fetched_firsts = osu.user_scores(&api_conf.username).firsts().await;
+                tracked_data.user_firsts =
+                    fetched_firsts.inspect_err(|e| tracing::error!("{e}")).ok();
             }
-            if user.scores_first_count != tracked.user_extended.as_ref().unwrap().scores_first_count
-            {
-                let new_firsts = osu.user_scores(&api_conf.username).firsts().await.unwrap();
-                tracked.user_firsts.replace(new_firsts);
-            }
-            tracked.user_extended = Some(user);
+            tracked_data.user_extended = Some(fetched_user);
+            std::thread::sleep(Duration::from_secs(15));
         } else {
-            println!("Same data!");
+            tracing::debug!("Tracked user has no data");
+            std::thread::sleep(Duration::from_secs(1));
         }
-        std::thread::sleep(Duration::from_secs(1));
     }
 }
 async fn serve(
     clients: Clients,
-    values: Arm<TrackedData>,
+    // values: Arm<TrackedData>,
     req: Request<hyper::body::Incoming>,
 ) -> Result<Response<Full<Bytes>>> {
     debug!("Called with uri {}", req.uri());

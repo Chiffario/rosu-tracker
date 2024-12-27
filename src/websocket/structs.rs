@@ -48,4 +48,14 @@ impl TrackedData {
             user_firsts: user_firsts.into(),
         }
     }
+    pub fn insert(
+        &mut self,
+        user_extended: impl Into<Option<UserExtended>>,
+        user_scores: impl Into<Option<Vec<Score>>>,
+        user_firsts: impl Into<Option<Vec<Score>>>,
+    ) {
+        self.user_extended = user_extended.into();
+        self.user_scores = user_scores.into();
+        self.user_firsts = user_firsts.into();
+    }
 }
