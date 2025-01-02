@@ -16,9 +16,9 @@ use tokio_tungstenite::{
     tungstenite::{handshake::derive_accept_key, protocol::Role, Message},
     WebSocketStream,
 };
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 pub mod structs;
-use crate::Api;
+use crate::setup::Api;
 use eyre::Result;
 use structs::*;
 
@@ -107,14 +107,13 @@ pub async fn server_thread(ctx_clients: Clients, values: Arm<TrackedData>) {
         });
     }
 }
-#[tracing::instrument(name = "fetch_thread", skip(osu, api_conf, tracked_data))]
+#[tracing::instrument(name = "fetch_thread", skip_all)]
 pub async fn fetch_thread(osu: Arc<Osu>, tracked_data: Arm<TrackedData>, api_conf: Api) {
-    println!("websockets::fetch_thread()");
     loop {
         let fetched_user = osu.user(&api_conf.username).await;
         match &fetched_user {
-            Ok(u) => println!("Fetched user: {}", u.username),
-            Err(e) => eprintln!("Error: {e}"),
+            Ok(u) => debug!("Fetched: {}", u.username),
+            Err(e) => error!("Error: {e}"),
         };
         let fetched_user = fetched_user.unwrap();
 
@@ -131,10 +130,10 @@ pub async fn fetch_thread(osu: Arc<Osu>, tracked_data: Arm<TrackedData>, api_con
                     fetched_firsts.inspect_err(|e| tracing::error!("{e}")).ok();
             }
             tracked_data.user_extended = Some(fetched_user);
-            std::thread::sleep(Duration::from_secs(15));
+            let _ = sleep(Duration::from_secs(15)).await;
         } else {
             tracing::debug!("Tracked user has no data");
-            std::thread::sleep(Duration::from_secs(1));
+            let _ = sleep(Duration::from_secs(1)).await;
         }
     }
 }
