@@ -119,16 +119,14 @@ pub async fn fetch_thread(osu: Arc<Osu>, tracked_data: Arm<TrackedData>, api_con
 
         let mut tracked_data = tracked_data.lock().await;
         if let Some(ref tracked_data_user) = tracked_data.user_extended {
-            if tracked_data_user.statistics != fetched_user.statistics {
-                tracing::debug!("User data changed, fetching new data");
-                let fetched_tops = osu.user_scores(&api_conf.username).await;
-                tracked_data.user_scores =
-                    fetched_tops.inspect_err(|e| tracing::error!("{e}")).ok();
+            // if tracked_data_user.statistics != fetched_user.statistics {
+            tracing::debug!("User data changed, fetching new data");
+            let fetched_tops = osu.user_scores(&api_conf.username).await;
+            tracked_data.user_scores = fetched_tops.inspect_err(|e| tracing::error!("{e}")).ok();
 
-                let fetched_firsts = osu.user_scores(&api_conf.username).firsts().await;
-                tracked_data.user_firsts =
-                    fetched_firsts.inspect_err(|e| tracing::error!("{e}")).ok();
-            }
+            let fetched_firsts = osu.user_scores(&api_conf.username).firsts().await;
+            tracked_data.user_firsts = fetched_firsts.inspect_err(|e| tracing::error!("{e}")).ok();
+            // }
             tracked_data.user_extended = Some(fetched_user);
             let _ = sleep(Duration::from_secs(15)).await;
         } else {

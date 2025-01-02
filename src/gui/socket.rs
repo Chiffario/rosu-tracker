@@ -45,7 +45,7 @@ pub fn connect_tops() -> impl Stream<Item = Event> {
                                         serde_json::from_str(data);
                                     if let Ok(user) = user {
                                         let _ = value
-                                            .send(Event::MessageReceived(Message::Tops(user)))
+                                            .send(Event::MessageReceived(Message::Firsts(user)))
                                             .await;
                                     }
                                 }

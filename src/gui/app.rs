@@ -9,9 +9,10 @@ use cosmic::iced::{Alignment, Length, Subscription};
 use cosmic::widget::{self, icon, menu, nav_bar};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
 use futures_util::SinkExt;
-use rosu_v2::prelude::UserExtended;
+use rosu_v2::prelude::{Score, SmallString, UserExtended};
 use std::collections::HashMap;
 use tokio::task::AbortHandle;
+use tracing::debug;
 
 use super::socket::{Connection, Event, Message};
 
@@ -32,6 +33,10 @@ pub struct AppModel {
     server_handles: Option<Vec<AbortHandle>>,
     // State of the websocket connection
     state: State,
+    // Latest received user data
+    user_extended: Option<UserExtended>,
+    user_tops: Option<Vec<Score>>,
+    user_firsts: Option<Vec<Score>>,
 }
 
 pub enum State {
@@ -79,18 +84,18 @@ impl Application for AppModel {
 
         nav.insert()
             .text("User")
-            .data::<Page>(Page::Page1)
+            .data::<Page>(Page::Page1("Balls".to_owned()))
             .icon(icon::from_name("applications-science-symbolic"))
             .activate();
 
         nav.insert()
             .text("Tops")
-            .data::<Page>(Page::Page2)
+            .data::<Page>(Page::Page2("Dicks".to_owned()))
             .icon(icon::from_name("applications-system-symbolic"));
 
         nav.insert()
             .text("Firsts")
-            .data::<Page>(Page::Page3)
+            .data::<Page>(Page::Page3("Boobs".to_owned()))
             .icon(icon::from_name("applications-games-symbolic"));
 
         // Construct the app model with the runtime's core.
@@ -114,6 +119,9 @@ impl Application for AppModel {
                 .unwrap_or_default(),
             server_handles: None,
             state: State::Disconnected,
+            user_extended: None,
+            user_tops: None,
+            user_firsts: None,
         };
 
         let rename = app.update_title();
@@ -163,7 +171,12 @@ impl Application for AppModel {
     /// Application events will be processed through the view. Any messages emitted by
     /// events received by widgets will be passed to the update method.
     fn view(&self) -> Element<Self::Message> {
-        widget::text::title1("welcome")
+        let title = self
+            .user_extended
+            .as_ref()
+            .map(|user| user.username.clone().into_string())
+            .unwrap_or("awo".to_owned());
+        widget::text::title1(title)
             .apply(widget::container)
             .width(Length::Fill)
             .height(Length::Fill)
@@ -256,12 +269,15 @@ impl Application for AppModel {
                     Message::Disconnected => {}
                     Message::User(user_extended) => {
                         println!("User received: {}", user_extended.username);
+                        self.user_extended = Some(user_extended);
                     }
                     Message::Tops(vec) => {
-                        println!("Top plays received: {:?}", vec[0]);
+                        println!("Top plays received: ");
+                        self.user_tops = Some(vec);
                     }
                     Message::Firsts(vec) => {
-                        println!("Firsts received: {:?}", vec[0]);
+                        println!("Firsts received: {:?}", vec.iter().next());
+                        self.user_firsts = Some(vec);
                     }
                 },
             },
@@ -283,8 +299,8 @@ impl Application for AppModel {
                 head.abort();
             }
         }
-        if let State::Connected(connection) = &self.state {
-            println!("Trying to drop connection")
+        if let State::Connected(_connection) = &self.state {
+            debug!("Trying to drop connection")
         }
         None
     }
@@ -334,9 +350,9 @@ where
 
 /// The page to display in the application.
 pub enum Page {
-    Page1,
-    Page2,
-    Page3,
+    Page1(String),
+    Page2(String),
+    Page3(String),
 }
 
 /// The context page to display in the context drawer.
