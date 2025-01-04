@@ -1,18 +1,18 @@
-// SPDX-License-Identifier: MIT
 use crate::gui::config::Config as AppConfig;
 use crate::gui::socket;
 use crate::setup::thread_init;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
+use cosmic::iced::advanced::widget::{self};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, Length, Subscription};
-use cosmic::widget::{self, icon, menu, nav_bar};
+use cosmic::iced_widget::row;
+use cosmic::widget::button::link;
+use cosmic::widget::text::{title1, title3};
+use cosmic::widget::{container, icon, menu, nav_bar};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
-use futures_util::SinkExt;
-use rosu_v2::prelude::{Score, SmallString, UserExtended};
+use rosu_v2::prelude::{Score, UserExtended};
 use std::collections::HashMap;
-use tokio::task::AbortHandle;
-use tracing::debug;
 
 use super::socket::{Connection, Event, Message};
 
@@ -29,8 +29,6 @@ pub struct AppModel {
     key_binds: HashMap<menu::KeyBind, MenuAction>,
     // Configuration data that persists between application runs.
     config: AppConfig,
-    // Join handles for the server
-    server_handles: Option<Vec<AbortHandle>>,
     // State of the websocket connection
     state: State,
     // Latest received user data
@@ -47,11 +45,11 @@ pub enum State {
 #[derive(Debug, Clone)]
 pub enum AppMessage {
     OpenRepositoryUrl,
-    SubscriptionChannel,
     ToggleContextPage(ContextPage),
     UpdateConfig(AppConfig),
     LaunchUrl(String),
-    StartServer(Vec<AbortHandle>),
+    // StartServer(Vec<AbortHandle>),
+    StartServer,
     ReceiveMessage(Event),
 }
 
@@ -84,18 +82,18 @@ impl Application for AppModel {
 
         nav.insert()
             .text("User")
-            .data::<Page>(Page::Page1("Balls".to_owned()))
+            .data::<Page>(Page::UserPage("Balls".to_owned()))
             .icon(icon::from_name("applications-science-symbolic"))
             .activate();
 
         nav.insert()
             .text("Tops")
-            .data::<Page>(Page::Page2("Dicks".to_owned()))
+            .data::<Page>(Page::TopsPage("Dicks".to_owned()))
             .icon(icon::from_name("applications-system-symbolic"));
 
         nav.insert()
             .text("Firsts")
-            .data::<Page>(Page::Page3("Boobs".to_owned()))
+            .data::<Page>(Page::FirstsPage("Boobs".to_owned()))
             .icon(icon::from_name("applications-games-symbolic"));
 
         // Construct the app model with the runtime's core.
@@ -117,7 +115,6 @@ impl Application for AppModel {
                     }
                 })
                 .unwrap_or_default(),
-            server_handles: None,
             state: State::Disconnected,
             user_extended: None,
             user_tops: None,
@@ -127,10 +124,12 @@ impl Application for AppModel {
         let rename = app.update_title();
 
         // Create a startup command that starts the socket server.
-        let command = Task::perform(thread_init(), |handles| {
-            cosmic::app::Message::App(AppMessage::StartServer(handles.unwrap()))
+        let command = Task::perform(thread_init(), |_| {
+            cosmic::app::Message::App(AppMessage::StartServer)
         });
-        (app, command)
+
+        let batch = Task::batch([rename, command]);
+        (app, batch)
     }
 
     /// Elements to pack at the start of the header bar.
@@ -171,18 +170,19 @@ impl Application for AppModel {
     /// Application events will be processed through the view. Any messages emitted by
     /// events received by widgets will be passed to the update method.
     fn view(&self) -> Element<Self::Message> {
-        let title = self
-            .user_extended
-            .as_ref()
-            .map(|user| user.username.clone().into_string())
-            .unwrap_or("awo".to_owned());
-        widget::text::title1(title)
-            .apply(widget::container)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .align_x(Horizontal::Center)
-            .align_y(Vertical::Center)
-            .into()
+        let user = self.user_extended.as_ref();
+        match user {
+            Some(user_inner) => self.draw_user(user_inner),
+            None => title1("Waiting")
+                .apply(container)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_x(Horizontal::Center)
+                .align_y(Vertical::Center)
+                .into(),
+        }
+        // .map(|user| user.username.clone().into_string())
+        // .unwrap_or("Waiting...".to_owned());
     }
 
     /// Register subscriptions for this application.
@@ -191,18 +191,8 @@ impl Application for AppModel {
     /// emit messages to the application through a channel. They are started at the
     /// beginning of the application, and persist through its lifetime.
     fn subscription(&self) -> Subscription<Self::Message> {
-        struct MySubscription;
-
         Subscription::batch(vec![
             // Create a subscription which emits updates through a channel.
-            Subscription::run_with_id(
-                std::any::TypeId::of::<MySubscription>(),
-                cosmic::iced::stream::channel(4, move |mut channel| async move {
-                    _ = channel.send(AppMessage::SubscriptionChannel).await;
-
-                    futures_util::future::pending().await
-                }),
-            ),
             Subscription::run(socket::connect_user).map(|x| AppMessage::ReceiveMessage(x)),
             Subscription::run(socket::connect_tops).map(|x| AppMessage::ReceiveMessage(x)),
             Subscription::run(socket::connect_firsts).map(|x| AppMessage::ReceiveMessage(x)),
@@ -229,10 +219,6 @@ impl Application for AppModel {
                 _ = open::that_detached("");
             }
 
-            AppMessage::SubscriptionChannel => {
-                // For example purposes only.
-            }
-
             AppMessage::ToggleContextPage(context_page) => {
                 if self.context_page == context_page {
                     // Close the context drawer if the toggled context page is the same.
@@ -254,7 +240,7 @@ impl Application for AppModel {
                     eprintln!("failed to open {url:?}: {err}");
                 }
             },
-            AppMessage::StartServer(handles) => self.server_handles = Some(handles),
+            AppMessage::StartServer => tracing::debug!("Iced: Started websocket server"),
             AppMessage::ReceiveMessage(event) => match event {
                 Event::Connected(connection) => {
                     self.state = State::Connected(connection);
@@ -262,7 +248,7 @@ impl Application for AppModel {
                 }
                 Event::Disconnected => {
                     self.state = State::Disconnected;
-                    println!("Disconnected")
+                    println!("Disconnected");
                 }
                 Event::MessageReceived(message) => match message {
                     Message::Connected => {}
@@ -294,14 +280,6 @@ impl Application for AppModel {
     }
 
     fn on_app_exit(&mut self) -> Option<Self::Message> {
-        if let Some(h) = &self.server_handles {
-            for head in h {
-                head.abort();
-            }
-        }
-        if let State::Connected(_connection) = &self.state {
-            debug!("Trying to drop connection")
-        }
         None
     }
 }
@@ -316,13 +294,11 @@ where
 
         // let icon = widget::svg(widget::svg::Handle::from_memory(""));
 
-        let title = widget::text::title3("rosu-tracker");
+        let title = title3("rosu-tracker");
 
-        let link = widget::button::link("")
-            .on_press(AppMessage::OpenRepositoryUrl)
-            .padding(0);
+        let link = link("").on_press(AppMessage::OpenRepositoryUrl).padding(0);
 
-        widget::column()
+        cosmic::widget::column()
             // .push(icon)
             .push(title)
             .push(link)
@@ -346,13 +322,98 @@ where
             Task::none()
         }
     }
+    fn draw_user(&self, user: &UserExtended) -> Element<AppMessage> {
+        let title = self.centered_username(user);
+
+        // let mut items = vec![];
+        // if let Some(statistics) = user.statistics.as_ref() {
+        //     items.push(self.make_pair("pp", statistics.pp.to_string()));
+        //     items.push(self.make_pair("rank", statistics.global_rank.unwrap_or(0).to_string()));
+        //     items.push(self.make_pair(
+        //         "country rank",
+        //         statistics.country_rank.unwrap_or(0).to_string(),
+        //     ));
+        //     items.push(self.make_pair("score", statistics.ranked_score.to_string()));
+        // } else {
+        //     items.push(widget::text::Text::new("You have no pp!").into());
+        //     items.push(widget::text::Text::new("You have no global rank!").into());
+        // };
+        // let items = cosmic::widget::column()
+        //     .width(Length::Fill)
+        //     .align_x(Horizontal::Center)
+        //     .padding(20)
+        //     .append(&mut items);
+        let data = cosmic::widget::container(self.user_extended_data(user));
+        let children = cosmic::widget::column()
+            .push(title)
+            .push(data)
+            .width(Length::Fill);
+        container(children)
+            .center_x(Length::Fill)
+            .center_y(Length::Shrink)
+            .into()
+    }
+
+    fn centered_username(&self, user: &UserExtended) -> Element<AppMessage> {
+        let username = cosmic::widget::container(
+            title1(user.username.clone().into_string()).align_x(Alignment::Center),
+        )
+        .align_x(Horizontal::Center)
+        .center_x(Length::Fill);
+        username.into()
+    }
+
+    fn user_extended_data(&self, user: &UserExtended) -> Element<AppMessage> {
+        let items = cosmic::widget::column()
+            .width(Length::Fill)
+            .align_x(Horizontal::Center)
+            .width(Length::Fill)
+            .padding(20);
+        let stats = user.statistics.as_ref();
+        let children = vec![
+            stats.map(|x| self.make_pair("pp", x.pp.to_string())),
+            stats.map(|x| self.make_pair("rank", x.global_rank.unwrap_or(0).to_string())),
+            stats.map(|x| self.make_pair("country rank", x.country_rank.unwrap_or(0).to_string())),
+            Some(self.make_pair(
+                "First places",
+                user.scores_first_count.unwrap_or(0).to_string(),
+            )),
+            stats.map(|x| self.make_pair("score", x.ranked_score.apply(format_number))),
+        ];
+        let children = children.into_iter().flatten();
+
+        let items = items.extend(children);
+        items.into()
+    }
+
+    fn make_pair<'a>(&'a self, title: &'a str, data: impl Into<String>) -> Element<'a, AppMessage> {
+        container(
+            row![
+                widget::text::Text::new(title)
+                    .align_x(Horizontal::Left)
+                    .size(16)
+                    .width(Length::FillPortion(1)),
+                // cosmic::widget::divider::vertical::default(),
+                widget::text::Text::new(data.into())
+                    .align_x(Horizontal::Right)
+                    .size(16)
+                    .width(Length::FillPortion(1))
+            ]
+            .width(Length::Fill)
+            // .spacing(20)
+            .height(Length::Shrink),
+        )
+        .center_x(Length::Fill)
+        .center_y(Length::Shrink)
+        .into()
+    }
 }
 
 /// The page to display in the application.
 pub enum Page {
-    Page1(String),
-    Page2(String),
-    Page3(String),
+    UserPage(String),
+    TopsPage(String),
+    FirstsPage(String),
 }
 
 /// The context page to display in the context drawer.
@@ -375,4 +436,18 @@ impl menu::action::MenuAction for MenuAction {
             MenuAction::About => AppMessage::ToggleContextPage(ContextPage::About),
         }
     }
+}
+
+fn format_number(int: impl Into<u64>) -> String {
+    let num = int
+        .into()
+        .to_string()
+        .as_bytes()
+        .rchunks(3)
+        .rev()
+        .map(std::str::from_utf8)
+        .collect::<Result<Vec<&str>, _>>()
+        .unwrap()
+        .join(",");
+    num
 }

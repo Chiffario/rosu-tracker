@@ -3,8 +3,6 @@ use tokio::{sync::Mutex, task::AbortHandle};
 
 use rosu_v2::Osu;
 use serde::Deserialize;
-use tracing::{level_filters::LevelFilter, Level};
-use tracing_subscriber::{filter::Targets, layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::websocket::{
     fetch_thread, handle_clients, server_thread,
@@ -18,7 +16,8 @@ pub struct Api {
     pub username: String,
 }
 
-pub async fn thread_init() -> eyre::Result<Vec<AbortHandle>> {
+pub async fn thread_init() -> eyre::Result<()> {
+    // pub async fn thread_init() -> eyre::Result<Vec<AbortHandle>> {
     // Setup tracing
     let subscriber = tracing_subscriber::FmtSubscriber::builder()
         .with_target(false)
@@ -71,10 +70,14 @@ pub async fn thread_init() -> eyre::Result<Vec<AbortHandle>> {
     let firsts = osu_user_firsts.await.ok();
     tracked_data.lock().await.insert(user, scores, firsts);
     println!("Spawned server thread");
-    let handles = vec![
-        fetch_thread.abort_handle(),
-        server_thread.abort_handle(),
-        client_thread.abort_handle(),
-    ];
-    Ok(handles)
+    // let handles = vec![
+    //     fetch_thread.abort_handle(),
+    //     server_thread.abort_handle(),
+    //     client_thread.abort_handle(),
+    // ];
+    let _ = fetch_thread.await;
+    let _ = server_thread.await;
+    let _ = client_thread.await;
+    // Ok(handles)
+    Ok(())
 }

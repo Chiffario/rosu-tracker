@@ -11,14 +11,17 @@ use hyper::{
 use hyper_util::rt::tokio::TokioIo;
 use rosu_v2::Osu;
 use std::{sync::Arc, time::Duration};
-use tokio::{net::TcpListener, spawn, task::block_in_place, time::sleep};
+use tokio::time::sleep;
 use tokio_tungstenite::{
     tungstenite::{handshake::derive_accept_key, protocol::Role, Message},
     WebSocketStream,
 };
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 pub mod structs;
-use crate::setup::Api;
+use crate::{
+    constants::{FIRSTS_ENDPOINT, TOPS_ENDPOINT, USER_ENDPOINT},
+    setup::Api,
+};
 use eyre::Result;
 use structs::*;
 
@@ -72,7 +75,7 @@ pub async fn handle_clients(clients: Clients, values: Arm<TrackedData>) {
             true
         })
     });
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
 }
 #[tracing::instrument(name = "server_thread")]
 pub async fn server_thread(ctx_clients: Clients, values: Arm<TrackedData>) {
@@ -87,7 +90,7 @@ pub async fn server_thread(ctx_clients: Clients, values: Arm<TrackedData>) {
         let io = TokioIo::new(stream);
 
         let ctx_clients = ctx_clients.clone();
-        let ctx_values = values.clone();
+        let _ctx_values = values.clone();
         println!("server_thread: service constructed");
         let service = service_fn(move |req| {
             let ctx_clients = ctx_clients.clone();
@@ -118,7 +121,7 @@ pub async fn fetch_thread(osu: Arc<Osu>, tracked_data: Arm<TrackedData>, api_con
         let fetched_user = fetched_user.unwrap();
 
         let mut tracked_data = tracked_data.lock().await;
-        if let Some(ref tracked_data_user) = tracked_data.user_extended {
+        if let Some(ref _tracked_data_user) = tracked_data.user_extended {
             // if tracked_data_user.statistics != fetched_user.statistics {
             tracing::debug!("User data changed, fetching new data");
             let fetched_tops = osu.user_scores(&api_conf.username).await;
@@ -128,7 +131,7 @@ pub async fn fetch_thread(osu: Arc<Osu>, tracked_data: Arm<TrackedData>, api_con
             tracked_data.user_firsts = fetched_firsts.inspect_err(|e| tracing::error!("{e}")).ok();
             // }
             tracked_data.user_extended = Some(fetched_user);
-            let _ = sleep(Duration::from_secs(15)).await;
+            let _ = sleep(Duration::from_secs(5)).await;
         } else {
             tracing::debug!("Tracked user has no data");
             let _ = sleep(Duration::from_secs(1)).await;
@@ -142,9 +145,9 @@ async fn serve(
 ) -> Result<Response<Full<Bytes>>> {
     debug!("Called with uri {}", req.uri());
     match req.uri().path() {
-        "/firsts" => serve_ws(clients, req, WsKind::Firsts).await,
-        "/tops" => serve_ws(clients, req, WsKind::Tops).await,
-        "/" => serve_ws(clients, req, WsKind::User).await,
+        FIRSTS_ENDPOINT => serve_ws(clients, req, WsKind::Firsts).await,
+        TOPS_ENDPOINT => serve_ws(clients, req, WsKind::Tops).await,
+        USER_ENDPOINT => serve_ws(clients, req, WsKind::User).await,
         _ => {
             println!("This URI doesn't exist");
             Err(eyre::Error::msg("This URI doesn't exist"))
