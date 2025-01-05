@@ -6,14 +6,16 @@ use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::iced::advanced::widget::{self};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, Length, Subscription};
-use cosmic::iced_widget::row;
+use cosmic::iced_widget::{column, row};
 use cosmic::prelude::CollectionWidget;
+use cosmic::theme::Container;
 use cosmic::widget::button::link;
 use cosmic::widget::text::{title1, title3};
-use cosmic::widget::{container, icon, menu, nav_bar};
-use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element};
+use cosmic::widget::{container, icon, menu, nav_bar, scrollable};
+use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element, Theme};
 use rosu_v2::prelude::{Score, UserExtended};
 use std::collections::HashMap;
+use tracing::debug;
 
 use super::socket::{Connection, Event, Message};
 
@@ -238,25 +240,23 @@ impl Application for AppModel {
             AppMessage::ReceiveMessage(event) => match event {
                 Event::Connected(connection) => {
                     self.state = State::Connected(connection);
-                    println!("Connected")
                 }
                 Event::Disconnected => {
                     self.state = State::Disconnected;
-                    println!("Disconnected");
                 }
                 Event::MessageReceived(message) => match message {
                     Message::Connected => {}
                     Message::Disconnected => {}
                     Message::User(user_extended) => {
-                        println!("User received: {}", user_extended.username);
+                        debug!("User received: {}", user_extended.username);
                         self.user_extended = Some(user_extended);
                     }
                     Message::Tops(vec) => {
-                        println!("Top plays received: {}", vec.len());
+                        debug!("Top plays received: {}", vec.len());
                         self.user_tops = Some(vec);
                     }
                     Message::Firsts(vec) => {
-                        println!("Firsts received: {}", vec.len());
+                        debug!("Firsts received: {}", vec.len());
                         self.user_firsts = Some(vec);
                     }
                 },
@@ -285,8 +285,6 @@ where
     /// The about page for this app.
     pub fn about(&self) -> Element<AppMessage> {
         let cosmic_theme::Spacing { space_xxs, .. } = theme::active().cosmic().spacing;
-
-        // let icon = widget::svg(widget::svg::Handle::from_memory(""));
 
         let title = title3("rosu-tracker");
 
@@ -338,16 +336,18 @@ where
     fn draw_scores(&self, scores: &[Score]) -> Element<AppMessage> {
         let mut score_text = scores
             .iter()
-            .map(|score| cosmic::widget::text(format!("{:?}", score.pp)))
+            .map(|score| self.draw_score(score))
             .collect::<Vec<_>>();
         if scores.len() == 0 {
-            score_text = vec![cosmic::widget::text("No scores!")];
+            score_text = vec![container(cosmic::widget::text("No scores!"))];
         }
-        cosmic::widget::column()
-            .append(&mut score_text)
-            .width(Length::Fill)
-            .padding(20)
-            .into()
+        scrollable(
+            cosmic::widget::column()
+                .append(&mut score_text)
+                .width(Length::Fill)
+                .padding(20),
+        )
+        .into()
     }
     fn draw_user(&self, user: &UserExtended) -> Element<AppMessage> {
         let title = self.centered_username(user);
@@ -415,6 +415,46 @@ where
         .center_y(Length::Shrink)
         .into()
     }
+
+    fn draw_score<'a>(&self, score: &Score) -> container::Container<'_, AppMessage, Theme> {
+        let mapset = score.mapset.as_ref().unwrap();
+        let map = score.map.as_ref().unwrap();
+        let title = cosmic::widget::text(mapset.title.clone());
+        let artist = cosmic::widget::text(mapset.artist.clone());
+        let difficulty = cosmic::widget::text(map.version.clone());
+        let sr = cosmic::widget::text(map.stars.to_string());
+        let pp = cosmic::widget::text(score.pp.unwrap_or_default().to_string());
+        let col = row![
+            column![title, artist, difficulty]
+                .padding(15)
+                .align_x(Horizontal::Left)
+                .width(Length::FillPortion(1)),
+            column![sr, pp]
+                .padding(10)
+                .align_x(Horizontal::Right)
+                .width(Length::FillPortion(1))
+        ];
+        container(col)
+            .class(Container::custom(|theme| {
+                let cosmic = theme.cosmic();
+                let corners = cosmic.corner_radii;
+                container::Style {
+                    text_color: Some(cosmic.background.on.into()),
+                    background: Some(
+                        cosmic::iced::Color::from(cosmic.background.component.base).into(),
+                    ),
+                    border: cosmic::iced::Border {
+                        radius: corners.radius_m.into(),
+                        width: 1.0,
+                        color: cosmic.background.divider.into(),
+                    },
+                    shadow: cosmic::iced::Shadow::default(),
+                    icon_color: Some(cosmic.background.on.into()),
+                }
+            }))
+            .width(Length::Fill)
+            .height(Length::Fixed(100.0))
+    }
 }
 
 /// The page to display in the application.
@@ -445,7 +485,6 @@ impl menu::action::MenuAction for MenuAction {
         }
     }
 }
-
 fn format_number(int: impl Into<u64>) -> String {
     let num = int
         .into()

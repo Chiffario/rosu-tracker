@@ -1,3 +1,5 @@
+use directories::{BaseDirs, ProjectDirs};
+use eyre::eyre;
 use std::{fs::File, io::read_to_string, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -25,9 +27,17 @@ pub async fn thread_init() -> eyre::Result<()> {
         .finish();
     tracing::subscriber::set_global_default(subscriber)?;
     // Parse user's configuration
-    let config =
-        read_to_string(File::open("/home/chiffa/Dev/Projects/rosu-tracker/config.toml").unwrap())
-            .unwrap();
+    let mut path = match BaseDirs::new() {
+        Some(dir) => dir.config_local_dir().to_owned(),
+        None => {
+            // TODO: Give an example path
+            return Err(eyre!("Please create a configuration directory"));
+        }
+    };
+    path.push("rosu-tracker/");
+    path.push("config.toml");
+
+    let config = read_to_string(File::open(path).unwrap()).unwrap();
     let api_conf: Api = toml::from_str(&config).unwrap();
     println!("Configuration constructed");
 

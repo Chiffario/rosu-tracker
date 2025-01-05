@@ -11,7 +11,7 @@ use hyper::{
 use hyper_util::rt::tokio::TokioIo;
 use rosu_v2::Osu;
 use std::{sync::Arc, time::Duration};
-use tokio::time::sleep;
+use tokio::time::{sleep, Interval};
 use tokio_tungstenite::{
     tungstenite::{handshake::derive_accept_key, protocol::Role, Message},
     WebSocketStream,
@@ -115,20 +115,20 @@ pub async fn fetch_thread(osu: Arc<Osu>, tracked_data: Arm<TrackedData>, api_con
         let fetched_user = fetched_user.unwrap();
 
         let mut tracked_data = tracked_data.lock().await;
-        if let Some(ref _tracked_data_user) = tracked_data.user_extended {
-            // if tracked_data_user.statistics != fetched_user.statistics {
-            tracing::debug!("User data changed, fetching new data");
-            let fetched_tops = osu.user_scores(&api_conf.username).limit(100).await;
-            tracked_data.user_scores = fetched_tops
-                .inspect(|s| println!("tops: {:?}", s.len()))
-                .inspect_err(|e| tracing::error!("{e}"))
-                .ok();
-            let fetched_firsts = osu.user_scores(&api_conf.username).firsts().await;
-            tracked_data.user_firsts = fetched_firsts
-                .inspect(|f| println!("firsts: {:?}", f.len()))
-                .inspect_err(|e| tracing::error!("{e}"))
-                .ok();
-            // }
+        if let Some(ref tracked_data_user) = tracked_data.user_extended {
+            if tracked_data_user.statistics != fetched_user.statistics {
+                debug!("User data changed, fetching new data");
+                let fetched_tops = osu.user_scores(&api_conf.username).limit(100);
+                let fetched_firsts = osu.user_scores(&api_conf.username).firsts();
+                tracked_data.user_scores = fetched_tops
+                    .await
+                    .inspect_err(|e| tracing::error!("{e}"))
+                    .ok();
+                tracked_data.user_firsts = fetched_firsts
+                    .await
+                    .inspect_err(|e| tracing::error!("{e}"))
+                    .ok();
+            }
             tracked_data.user_extended = Some(fetched_user);
             let _ = sleep(Duration::from_secs(5)).await;
         } else {
