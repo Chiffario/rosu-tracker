@@ -1,8 +1,9 @@
 use std::{fs::File, io::read_to_string, sync::Arc};
-use tokio::{sync::Mutex, task::AbortHandle};
+use tokio::sync::Mutex;
 
 use rosu_v2::Osu;
 use serde::Deserialize;
+use tracing::debug;
 
 use crate::websocket::{
     fetch_thread, handle_clients, server_thread,
@@ -41,8 +42,8 @@ pub async fn thread_init() -> eyre::Result<()> {
     );
 
     let osu_user = osu.user(&api_conf.username);
-    let osu_user_scores = osu.user_scores(&api_conf.username);
-    let osu_user_firsts = osu.user_scores(&api_conf.username);
+    let osu_user_scores = osu.user_scores(&api_conf.username).limit(100);
+    let osu_user_firsts = osu.user_scores(&api_conf.username).firsts();
     let tracked_data: Arm<TrackedData> = Arc::new(Mutex::new(TrackedData::new()));
     let alt_clients = clients.clone();
     // Setup a thread to actually serve the data
@@ -52,7 +53,7 @@ pub async fn thread_init() -> eyre::Result<()> {
             handle_clients(alt_clients.clone(), tracker.clone()).await;
         }
     });
-    println!("Spawned client thread");
+    debug!("Spawned client thread");
     // Setup thread to fetch data from osu api
     let tracker = tracked_data.clone();
     let osu_ref = osu.clone();
@@ -61,7 +62,7 @@ pub async fn thread_init() -> eyre::Result<()> {
         let config = api_conf.clone();
         fetch_thread(osu_ref, tracker, config).await;
     });
-    println!("Spawned fetch thread");
+    debug!("Spawned fetch thread");
     // Setup a thread to run the server
     let tracker = tracked_data.clone();
     let server_thread = tokio::spawn(async { server_thread(clients, tracker).await });
@@ -69,12 +70,7 @@ pub async fn thread_init() -> eyre::Result<()> {
     let scores = osu_user_scores.await.ok();
     let firsts = osu_user_firsts.await.ok();
     tracked_data.lock().await.insert(user, scores, firsts);
-    println!("Spawned server thread");
-    // let handles = vec![
-    //     fetch_thread.abort_handle(),
-    //     server_thread.abort_handle(),
-    //     client_thread.abort_handle(),
-    // ];
+    debug!("Spawned server thread");
     let _ = fetch_thread.await;
     let _ = server_thread.await;
     let _ = client_thread.await;

@@ -7,6 +7,7 @@ use cosmic::iced::advanced::widget::{self};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, Length, Subscription};
 use cosmic::iced_widget::row;
+use cosmic::prelude::CollectionWidget;
 use cosmic::widget::button::link;
 use cosmic::widget::text::{title1, title3};
 use cosmic::widget::{container, icon, menu, nav_bar};
@@ -82,18 +83,18 @@ impl Application for AppModel {
 
         nav.insert()
             .text("User")
-            .data::<Page>(Page::UserPage("Balls".to_owned()))
+            .data::<Page>(Page::UserPage)
             .icon(icon::from_name("applications-science-symbolic"))
             .activate();
 
         nav.insert()
             .text("Tops")
-            .data::<Page>(Page::TopsPage("Dicks".to_owned()))
+            .data::<Page>(Page::TopsPage)
             .icon(icon::from_name("applications-system-symbolic"));
 
         nav.insert()
             .text("Firsts")
-            .data::<Page>(Page::FirstsPage("Boobs".to_owned()))
+            .data::<Page>(Page::FirstsPage)
             .icon(icon::from_name("applications-games-symbolic"));
 
         // Construct the app model with the runtime's core.
@@ -170,19 +171,12 @@ impl Application for AppModel {
     /// Application events will be processed through the view. Any messages emitted by
     /// events received by widgets will be passed to the update method.
     fn view(&self) -> Element<Self::Message> {
-        let user = self.user_extended.as_ref();
-        match user {
-            Some(user_inner) => self.draw_user(user_inner),
-            None => title1("Waiting")
-                .apply(container)
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .align_x(Horizontal::Center)
-                .align_y(Vertical::Center)
-                .into(),
+        match self.nav.active_data::<Page>() {
+            Some(Page::UserPage) => self.user_view(),
+            Some(Page::TopsPage) => self.tops_view(),
+            Some(Page::FirstsPage) => self.firsts_view(),
+            None => todo!(),
         }
-        // .map(|user| user.username.clone().into_string())
-        // .unwrap_or("Waiting...".to_owned());
     }
 
     /// Register subscriptions for this application.
@@ -258,11 +252,11 @@ impl Application for AppModel {
                         self.user_extended = Some(user_extended);
                     }
                     Message::Tops(vec) => {
-                        println!("Top plays received: ");
+                        println!("Top plays received: {}", vec.len());
                         self.user_tops = Some(vec);
                     }
                     Message::Firsts(vec) => {
-                        println!("Firsts received: {:?}", vec.iter().next());
+                        println!("Firsts received: {}", vec.len());
                         self.user_firsts = Some(vec);
                     }
                 },
@@ -322,27 +316,41 @@ where
             Task::none()
         }
     }
+    fn user_view(&self) -> Element<AppMessage> {
+        let user = self.user_extended.as_ref();
+        match user {
+            Some(user_inner) => self.draw_user(user_inner),
+            None => title1("Waiting")
+                .apply(container)
+                .width(Length::Fill)
+                .height(Length::Fill)
+                .align_x(Horizontal::Center)
+                .align_y(Vertical::Center)
+                .into(),
+        }
+    }
+    fn tops_view(&self) -> Element<AppMessage> {
+        self.draw_scores(&self.user_tops.as_ref().unwrap_or(&vec![]))
+    }
+    fn firsts_view(&self) -> Element<AppMessage> {
+        self.draw_scores(&self.user_firsts.as_ref().unwrap_or(&vec![]))
+    }
+    fn draw_scores(&self, scores: &[Score]) -> Element<AppMessage> {
+        let mut score_text = scores
+            .iter()
+            .map(|score| cosmic::widget::text(format!("{:?}", score.pp)))
+            .collect::<Vec<_>>();
+        if scores.len() == 0 {
+            score_text = vec![cosmic::widget::text("No scores!")];
+        }
+        cosmic::widget::column()
+            .append(&mut score_text)
+            .width(Length::Fill)
+            .padding(20)
+            .into()
+    }
     fn draw_user(&self, user: &UserExtended) -> Element<AppMessage> {
         let title = self.centered_username(user);
-
-        // let mut items = vec![];
-        // if let Some(statistics) = user.statistics.as_ref() {
-        //     items.push(self.make_pair("pp", statistics.pp.to_string()));
-        //     items.push(self.make_pair("rank", statistics.global_rank.unwrap_or(0).to_string()));
-        //     items.push(self.make_pair(
-        //         "country rank",
-        //         statistics.country_rank.unwrap_or(0).to_string(),
-        //     ));
-        //     items.push(self.make_pair("score", statistics.ranked_score.to_string()));
-        // } else {
-        //     items.push(widget::text::Text::new("You have no pp!").into());
-        //     items.push(widget::text::Text::new("You have no global rank!").into());
-        // };
-        // let items = cosmic::widget::column()
-        //     .width(Length::Fill)
-        //     .align_x(Horizontal::Center)
-        //     .padding(20)
-        //     .append(&mut items);
         let data = cosmic::widget::container(self.user_extended_data(user));
         let children = cosmic::widget::column()
             .push(title)
@@ -411,9 +419,9 @@ where
 
 /// The page to display in the application.
 pub enum Page {
-    UserPage(String),
-    TopsPage(String),
-    FirstsPage(String),
+    UserPage,
+    TopsPage,
+    FirstsPage,
 }
 
 /// The context page to display in the context drawer.

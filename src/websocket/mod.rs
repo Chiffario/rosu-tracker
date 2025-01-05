@@ -19,7 +19,7 @@ use tokio_tungstenite::{
 use tracing::{debug, error};
 pub mod structs;
 use crate::{
-    constants::{FIRSTS_ENDPOINT, TOPS_ENDPOINT, USER_ENDPOINT},
+    constants::{BASE_IP, FIRSTS_ENDPOINT, TOPS_ENDPOINT, USER_ENDPOINT},
     setup::Api,
 };
 use eyre::Result;
@@ -79,11 +79,7 @@ pub async fn handle_clients(clients: Clients, values: Arm<TrackedData>) {
 }
 #[tracing::instrument(name = "server_thread")]
 pub async fn server_thread(ctx_clients: Clients, values: Arm<TrackedData>) {
-    println!("websockets::server_thread()");
-    let tcp = tokio::net::TcpListener::bind("127.0.0.1:7272")
-        .await
-        .unwrap();
-    println!("server_thread: listener constructed");
+    let tcp = tokio::net::TcpListener::bind(BASE_IP).await.unwrap();
     loop {
         let (stream, _) = tcp.accept().await.unwrap();
 
@@ -91,14 +87,12 @@ pub async fn server_thread(ctx_clients: Clients, values: Arm<TrackedData>) {
 
         let ctx_clients = ctx_clients.clone();
         let _ctx_values = values.clone();
-        println!("server_thread: service constructed");
         let service = service_fn(move |req| {
             let ctx_clients = ctx_clients.clone();
             // let ctx_values = ctx_values.clone();
             // serve(ctx_clients, ctx_values, req)
             serve(ctx_clients, req)
         });
-        println!("start building http clients");
         tokio::spawn(async {
             if let Err(err) = http1::Builder::new()
                 .serve_connection(io, service)
@@ -124,11 +118,16 @@ pub async fn fetch_thread(osu: Arc<Osu>, tracked_data: Arm<TrackedData>, api_con
         if let Some(ref _tracked_data_user) = tracked_data.user_extended {
             // if tracked_data_user.statistics != fetched_user.statistics {
             tracing::debug!("User data changed, fetching new data");
-            let fetched_tops = osu.user_scores(&api_conf.username).await;
-            tracked_data.user_scores = fetched_tops.inspect_err(|e| tracing::error!("{e}")).ok();
-
+            let fetched_tops = osu.user_scores(&api_conf.username).limit(100).await;
+            tracked_data.user_scores = fetched_tops
+                .inspect(|s| println!("tops: {:?}", s.len()))
+                .inspect_err(|e| tracing::error!("{e}"))
+                .ok();
             let fetched_firsts = osu.user_scores(&api_conf.username).firsts().await;
-            tracked_data.user_firsts = fetched_firsts.inspect_err(|e| tracing::error!("{e}")).ok();
+            tracked_data.user_firsts = fetched_firsts
+                .inspect(|f| println!("firsts: {:?}", f.len()))
+                .inspect_err(|e| tracing::error!("{e}"))
+                .ok();
             // }
             tracked_data.user_extended = Some(fetched_user);
             let _ = sleep(Duration::from_secs(5)).await;
