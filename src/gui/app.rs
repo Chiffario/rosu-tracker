@@ -5,7 +5,7 @@ use cosmic::app::{context_drawer, Core, Task};
 use cosmic::cosmic_config::{self, CosmicConfigEntry};
 use cosmic::iced::advanced::widget::{self};
 use cosmic::iced::alignment::{Horizontal, Vertical};
-use cosmic::iced::{Alignment, Length, Subscription};
+use cosmic::iced::{Alignment, Length, Padding, Subscription};
 use cosmic::iced_widget::{column, row};
 use cosmic::prelude::CollectionWidget;
 use cosmic::theme::Container;
@@ -86,18 +86,21 @@ impl Application for AppModel {
         nav.insert()
             .text("User")
             .data::<Page>(Page::UserPage)
-            .icon(icon::from_name("applications-science-symbolic"))
+            // user-available is just a guy
+            .icon(icon::from_name("user-available-symbolic"))
             .activate();
 
         nav.insert()
             .text("Tops")
             .data::<Page>(Page::TopsPage)
-            .icon(icon::from_name("applications-system-symbolic"));
+            // user-bookmarks is a star in cosmic icon theme
+            .icon(icon::from_name("user-bookmarks-symbolic"));
 
         nav.insert()
             .text("Firsts")
             .data::<Page>(Page::FirstsPage)
-            .icon(icon::from_name("applications-games-symbolic"));
+            // text-html looks like Earth, makes sense for leaderboards, fight me
+            .icon(icon::from_name("text-html-symbolic"));
 
         // Construct the app model with the runtime's core.
         let mut app = AppModel {
@@ -343,9 +346,16 @@ where
         }
         scrollable(
             cosmic::widget::column()
+                .spacing(20)
                 .append(&mut score_text)
                 .width(Length::Fill)
-                .padding(20),
+                .max_width(800)
+                .padding(Padding {
+                    top: 0.0,
+                    right: 20.0,
+                    bottom: 0.0,
+                    left: 10.0,
+                }),
         )
         .into()
     }
@@ -419,20 +429,33 @@ where
     fn draw_score<'a>(&self, score: &Score) -> container::Container<'_, AppMessage, Theme> {
         let mapset = score.mapset.as_ref().unwrap();
         let map = score.map.as_ref().unwrap();
-        let title = cosmic::widget::text(mapset.title.clone());
-        let artist = cosmic::widget::text(mapset.artist.clone());
-        let difficulty = cosmic::widget::text(map.version.clone());
-        let sr = cosmic::widget::text(map.stars.to_string());
-        let pp = cosmic::widget::text(score.pp.unwrap_or_default().to_string());
+        let title_diff: Element<AppMessage> =
+            cosmic::widget::button::link(format!("{} [{}]", mapset.title.clone(), &map.version))
+                .on_press(AppMessage::LaunchUrl(format!(
+                    "https://osu.ppy.sh/scores/{}",
+                    score.id
+                )))
+                .width(Length::Fill)
+                .padding(0)
+                .into();
+        let artist = cosmic::widget::text(mapset.artist.clone()).height(Length::Fill);
+        let date = cosmic::widget::text(score.ended_at.date().to_string());
+        let pp = cosmic::widget::text(format!(
+            "{} pp",
+            score.pp.unwrap_or_default().trunc() as u32
+        ))
+        .height(Length::Fill);
+        let combo = cosmic::widget::text(format!("{} combo", score.max_combo)).height(Length::Fill);
+        let spacing = cosmic::widget::vertical_space();
         let col = row![
-            column![title, artist, difficulty]
-                .padding(15)
-                .align_x(Horizontal::Left)
-                .width(Length::FillPortion(1)),
-            column![sr, pp]
+            column![title_diff, artist, spacing, combo]
                 .padding(10)
-                .align_x(Horizontal::Right)
+                .width(Length::FillPortion(2))
+                .height(Length::Fill),
+            column![pp, date]
+                .padding(10)
                 .width(Length::FillPortion(1))
+                .height(Length::Fill)
         ];
         container(col)
             .class(Container::custom(|theme| {
