@@ -10,11 +10,11 @@ use cosmic::iced_widget::{column, row};
 use cosmic::prelude::CollectionWidget;
 use cosmic::theme::Container;
 use cosmic::widget::button::link;
+use cosmic::widget::text;
 use cosmic::widget::text::{title1, title3};
-use cosmic::widget::{container, icon, menu, nav_bar, scrollable};
+use cosmic::widget::{container, icon, menu, nav_bar, scrollable, vertical_space};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element, Theme};
 use rosu_v2::prelude::{Score, UserExtended};
-use serde_json::to_string;
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -491,7 +491,7 @@ where
         let mapset = score.mapset.as_ref().unwrap();
         let map = score.map.as_ref().unwrap();
         let title_diff: Element<AppMessage> = cosmic::widget::button::custom(
-            cosmic::widget::text(format!("{} [{}]", mapset.title.clone(), &map.version))
+            text(format!("{} [{}]", mapset.title.clone(), &map.version))
                 .wrapping(widget::text::Wrapping::None),
         )
         .class(theme::Button::Link)
@@ -502,15 +502,15 @@ where
         .width(Length::Fill)
         .padding(0)
         .into();
-        let artist = cosmic::widget::text(mapset.artist.clone()).height(Length::Fill);
-        let date = cosmic::widget::text(score.ended_at.date().to_string());
-        let pp = cosmic::widget::text(format!(
+        let artist = text(mapset.artist.clone()).height(Length::Fill);
+        let date = text(score.ended_at.date().to_string());
+        let pp = text(format!(
             "{} pp",
             score.pp.unwrap_or_default().trunc() as u32
         ))
         .height(Length::Fill);
-        let combo = cosmic::widget::text(format!("{} combo", score.max_combo)).height(Length::Fill);
-        let spacing = cosmic::widget::vertical_space();
+        let combo = text(format!("{} combo", score.max_combo)).height(Length::Fill);
+        let spacing = vertical_space();
         let col = row![
             column![title_diff, artist, spacing, combo]
                 .padding(10)
