@@ -54,6 +54,7 @@ pub async fn thread_init() -> eyre::Result<()> {
     let osu_user = osu.user(&api_conf.username);
     let osu_user_scores = osu.user_scores(&api_conf.username).limit(100);
     let osu_user_firsts = osu.user_scores(&api_conf.username).firsts();
+    let osu_user_recent = osu.user_scores(&api_conf.username).recent().limit(20);
     let tracked_data: Arm<TrackedData> = Arc::new(Mutex::new(TrackedData::new()));
     let alt_clients = clients.clone();
     // Setup a thread to actually serve the data
@@ -79,7 +80,11 @@ pub async fn thread_init() -> eyre::Result<()> {
     let user = osu_user.await.ok();
     let scores = osu_user_scores.await.ok();
     let firsts = osu_user_firsts.await.ok();
-    tracked_data.lock().await.insert(user, scores, firsts);
+    let recent = osu_user_recent.await.ok();
+    tracked_data
+        .lock()
+        .await
+        .insert(user, scores, firsts, recent);
     debug!("Spawned server thread");
     let _ = fetch_thread.await;
     let _ = server_thread.await;

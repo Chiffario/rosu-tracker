@@ -19,7 +19,7 @@ use tokio_tungstenite::{
 use tracing::{debug, error};
 pub mod structs;
 use crate::{
-    constants::{BASE_IP, FIRSTS_ENDPOINT, TOPS_ENDPOINT, USER_ENDPOINT},
+    constants::{BASE_IP, FIRSTS_ENDPOINT, RECENT_ENDPOINT, TOPS_ENDPOINT, USER_ENDPOINT},
     setup::Api,
 };
 use eyre::Result;
@@ -31,12 +31,13 @@ pub async fn handle_clients(clients: Clients, values: Arm<TrackedData>) {
     if lock.user_extended.is_none() {
         return;
     }
-    let (ser_profile, ser_tops, ser_firsts) = {
+    let (ser_profile, ser_tops, ser_firsts, ser_recent) = {
         let data = &*lock;
         (
             serde_json::to_string(&data.user_extended).unwrap(),
             serde_json::to_string(&data.user_scores).unwrap(),
             serde_json::to_string(&data.user_firsts).unwrap(),
+            serde_json::to_string(&data.user_recent).unwrap(),
         )
     };
     debug!("Constructed serialized data");
@@ -61,6 +62,7 @@ pub async fn handle_clients(clients: Clients, values: Arm<TrackedData>) {
                 WsKind::User => socket.client.send(Message::Text(ser_profile.clone())).await,
                 WsKind::Tops => socket.client.send(Message::Text(ser_tops.clone())).await,
                 WsKind::Firsts => socket.client.send(Message::Text(ser_firsts.clone())).await,
+                WsKind::Recent => socket.client.send(Message::Text(ser_recent.clone())).await,
             };
             debug!("Sent data to {:?}", socket);
             // Close the connection on error
@@ -107,6 +109,7 @@ pub async fn server_thread(ctx_clients: Clients, values: Arm<TrackedData>) {
 #[tracing::instrument(name = "fetch_thread", skip_all)]
 pub async fn fetch_thread(osu: Arc<Osu>, tracked_data: Arm<TrackedData>, api_conf: Api) {
     loop {
+        let fetched_recent = osu.user_scores(&api_conf.username).recent().limit(20);
         let fetched_user = osu.user(&api_conf.username).await;
         match &fetched_user {
             Ok(u) => debug!("Fetched: {}", u.username),
@@ -130,6 +133,7 @@ pub async fn fetch_thread(osu: Arc<Osu>, tracked_data: Arm<TrackedData>, api_con
                     .ok();
             }
             tracked_data.user_extended = Some(fetched_user);
+            tracked_data.user_recent = Some(fetched_recent.await.unwrap_or_default());
             let _ = sleep(Duration::from_secs(5)).await;
         } else {
             tracing::debug!("Tracked user has no data");
@@ -147,6 +151,7 @@ async fn serve(
         FIRSTS_ENDPOINT => serve_ws(clients, req, WsKind::Firsts).await,
         TOPS_ENDPOINT => serve_ws(clients, req, WsKind::Tops).await,
         USER_ENDPOINT => serve_ws(clients, req, WsKind::User).await,
+        RECENT_ENDPOINT => serve_ws(clients, req, WsKind::Recent).await,
         _ => {
             println!("This URI doesn't exist");
             Err(eyre::Error::msg("This URI doesn't exist"))

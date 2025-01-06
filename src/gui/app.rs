@@ -40,6 +40,7 @@ pub struct AppModel {
     user_extended: Option<UserExtended>,
     user_tops: Option<Vec<Score>>,
     user_firsts: Option<Vec<Score>>,
+    user_recent: Option<Vec<Score>>,
     // First received (a.k.a. initial) user data
     initial_user_extended: Option<UserExtended>,
     initial_user_tops: Option<Vec<Score>>,
@@ -107,6 +108,11 @@ impl Application for AppModel {
         nav.insert()
             .text("Firsts")
             .data::<Page>(Page::FirstsPage)
+            // text-html looks like Earth, makes sense for leaderboards, fight me
+            .icon(icon::from_name("text-html-symbolic"));
+        nav.insert()
+            .text("Recent")
+            .data::<Page>(Page::RecentPage)
             // text-html looks like Earth, makes sense for leaderboards, fight me
             .icon(icon::from_name("text-html-symbolic"));
 
@@ -179,6 +185,7 @@ impl Application for AppModel {
             Some(Page::UserPage) => self.user_view(),
             Some(Page::TopsPage) => self.tops_view(),
             Some(Page::FirstsPage) => self.firsts_view(),
+            Some(Page::RecentPage) => self.recent_view(),
             None => todo!(),
         }
     }
@@ -194,6 +201,7 @@ impl Application for AppModel {
             Subscription::run(socket::connect_user).map(|x| AppMessage::ReceiveMessage(x)),
             Subscription::run(socket::connect_tops).map(|x| AppMessage::ReceiveMessage(x)),
             Subscription::run(socket::connect_firsts).map(|x| AppMessage::ReceiveMessage(x)),
+            Subscription::run(socket::connect_recent).map(|x| AppMessage::ReceiveMessage(x)),
             // Watch for application configuration changes.
             self.core()
                 .watch_config::<AppConfig>(Self::APP_ID)
@@ -260,6 +268,10 @@ impl Application for AppModel {
                     Message::Firsts(vec) => {
                         debug!("Firsts received: {}", vec.len());
                         self.user_firsts = Some(vec);
+                    }
+                    Message::Recent(vec) => {
+                        debug!("Recent received: {}", vec.len());
+                        self.user_recent = Some(vec)
                     }
                 },
             },
@@ -339,6 +351,9 @@ where
     }
     fn firsts_view(&self) -> Element<AppMessage> {
         self.draw_scores(&self.user_firsts.as_ref().unwrap_or(&vec![]))
+    }
+    fn recent_view(&self) -> Element<AppMessage> {
+        self.draw_scores(&self.user_recent.as_ref().unwrap_or(&vec![]))
     }
     fn draw_scores(&self, scores: &[Score]) -> Element<AppMessage> {
         let mut score_text = scores
@@ -549,6 +564,7 @@ pub enum Page {
     UserPage,
     TopsPage,
     FirstsPage,
+    RecentPage,
 }
 
 /// The context page to display in the context drawer.

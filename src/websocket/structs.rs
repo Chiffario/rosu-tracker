@@ -12,6 +12,7 @@ pub enum WsKind {
     User,
     Tops,
     Firsts,
+    Recent,
 }
 #[derive(Debug)]
 pub struct WsClient {
@@ -27,6 +28,7 @@ pub struct TrackedData {
     pub user_extended: Option<UserExtended>,
     pub user_scores: Option<Vec<Score>>,
     pub user_firsts: Option<Vec<Score>>,
+    pub user_recent: Option<Vec<Score>>,
     // TODO: Add scorefarm api
 }
 
@@ -36,6 +38,7 @@ impl TrackedData {
             user_extended: None,
             user_scores: None,
             user_firsts: None,
+            user_recent: None,
         }
     }
     #[allow(dead_code)]
@@ -43,11 +46,13 @@ impl TrackedData {
         user_extended: impl Into<Option<UserExtended>>,
         user_scores: impl Into<Option<Vec<Score>>>,
         user_firsts: impl Into<Option<Vec<Score>>>,
+        user_recent: impl Into<Option<Vec<Score>>>,
     ) -> Self {
         Self {
             user_extended: user_extended.into(),
             user_scores: user_scores.into(),
             user_firsts: user_firsts.into(),
+            user_recent: user_recent.into(),
         }
     }
     pub fn insert(
@@ -55,9 +60,11 @@ impl TrackedData {
         user_extended: impl Into<Option<UserExtended>>,
         user_scores: impl Into<Option<Vec<Score>>>,
         user_firsts: impl Into<Option<Vec<Score>>>,
+        user_recent: impl Into<Option<Vec<Score>>>,
     ) {
         self.user_extended = user_extended.into();
         self.user_scores = user_scores.into();
         self.user_firsts = user_firsts.into();
+        self.user_recent = user_recent.into();
     }
 }

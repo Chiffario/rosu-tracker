@@ -11,7 +11,7 @@ use serde::Deserialize;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
 
-use crate::constants::{FIRSTS_URI, TOPS_URI, USER_URI};
+use crate::constants::{FIRSTS_URI, RECENT_URI, TOPS_URI, USER_URI};
 
 /// Create a stream of `UserExtended` messages
 pub fn connect_user() -> impl Stream<Item = Event> {
@@ -24,6 +24,9 @@ pub fn connect_firsts() -> impl Stream<Item = Event> {
 /// Create a stream of user top scores
 pub fn connect_tops() -> impl Stream<Item = Event> {
     connect_websocket::<Vec<Score>, Tops>(TOPS_URI)
+}
+pub fn connect_recent() -> impl Stream<Item = Event> {
+    connect_websocket::<Vec<Score>, Recent>(RECENT_URI)
 }
 /// General websocket stream creation. `U` should be a newtype over `T`
 fn connect_websocket<T, U>(uri: &str) -> impl Stream<Item = Event> + use<'_, T, U>
@@ -93,6 +96,7 @@ pub enum Message {
     User(UserExtended),
     Tops(Vec<Score>),
     Firsts(Vec<Score>),
+    Recent(Vec<Score>),
 }
 /// Workaround to allow type-level difference between user tops and user firsts
 trait IntoMessage<T> {
@@ -117,6 +121,12 @@ impl IntoMessage<Vec<Score>> for Firsts {
     }
 }
 
+impl IntoMessage<Vec<Score>> for Recent {
+    fn into_message(value: Vec<Score>) -> Message {
+        Message::Recent(value.into())
+    }
+}
+
 struct User(UserExtended);
 
 impl Into<UserExtended> for User {
@@ -135,6 +145,14 @@ impl Into<Vec<Score>> for Tops {
 struct Firsts(Vec<Score>);
 
 impl Into<Vec<Score>> for Firsts {
+    fn into(self) -> Vec<Score> {
+        self.0
+    }
+}
+
+struct Recent(Vec<Score>);
+
+impl Into<Vec<Score>> for Recent {
     fn into(self) -> Vec<Score> {
         self.0
     }

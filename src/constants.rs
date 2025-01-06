@@ -5,7 +5,9 @@ pub const BASE_URI: &str = constcat::concat!("ws://", BASE_IP);
 pub const USER_ENDPOINT: &str = "/";
 pub const TOPS_ENDPOINT: &str = "/tops";
 pub const FIRSTS_ENDPOINT: &str = "/firsts";
+pub const RECENT_ENDPOINT: &str = "/recent";
 /// Full URIs
 pub const USER_URI: &str = constcat::concat!(BASE_URI, USER_ENDPOINT);
 pub const TOPS_URI: &str = constcat::concat!(BASE_URI, TOPS_ENDPOINT);
 pub const FIRSTS_URI: &str = constcat::concat!(BASE_URI, FIRSTS_ENDPOINT);
+pub const RECENT_URI: &str = constcat::concat!(BASE_URI, RECENT_ENDPOINT);
