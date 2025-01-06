@@ -14,6 +14,7 @@ use cosmic::widget::text::{title1, title3};
 use cosmic::widget::{container, icon, menu, nav_bar, scrollable};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element, Theme};
 use rosu_v2::prelude::{Score, UserExtended};
+use serde_json::to_string;
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -394,25 +395,25 @@ where
             .align_x(Horizontal::Center)
             .width(Length::Fill)
             .padding(20);
-        let current_statistics = current.statistics.as_ref();
-        let initial_statistics = initial.statistics.as_ref();
+        let current_statistics = current.statistics.as_ref().unwrap();
+        let initial_statistics = initial.statistics.as_ref().unwrap();
         let children = [
             self.make_pair::<f32>(
                 "pp",
-                current_statistics.unwrap().pp,
-                initial_statistics.unwrap().pp,
+                current_statistics.pp,
+                initial_statistics.pp,
                 None::<fn(f32) -> String>,
             ),
             self.make_pair(
                 "rank",
-                current_statistics.unwrap().global_rank.unwrap_or(0),
-                initial_statistics.unwrap().global_rank.unwrap_or(0),
+                current_statistics.global_rank.unwrap_or(0),
+                initial_statistics.global_rank.unwrap_or(0),
                 None::<fn(u32) -> String>,
             ),
             self.make_pair::<u32>(
                 "country rank",
-                current_statistics.unwrap().country_rank.unwrap_or(0),
-                initial_statistics.unwrap().country_rank.unwrap_or(0),
+                current_statistics.country_rank.unwrap_or(0),
+                initial_statistics.country_rank.unwrap_or(0),
                 None::<fn(u32) -> String>,
             ),
             self.make_pair::<u32>(
@@ -423,14 +424,14 @@ where
             ),
             self.make_pair::<f32>(
                 "accuracy",
-                current_statistics.unwrap().accuracy,
-                initial_statistics.unwrap().accuracy,
-                None::<fn(f32) -> String>,
+                current_statistics.accuracy,
+                initial_statistics.accuracy,
+                Some(format_accuracy),
             ),
             self.make_pair(
                 "ranked score",
-                current_statistics.as_ref().unwrap().ranked_score,
-                initial_statistics.as_ref().unwrap().ranked_score,
+                current_statistics.ranked_score,
+                initial_statistics.ranked_score,
                 Some(format_number),
             ),
         ];
@@ -445,17 +446,16 @@ where
         title: &'a str,
         current: T,
         initial: T,
-        formatter: Option<impl Fn(T) -> String>,
+        fmt: Option<impl Fn(T) -> String>,
     ) -> Element<'a, AppMessage>
     where
-        T: ToString + std::ops::Sub<Output = T> + Copy,
-        <T as std::ops::Sub>::Output: std::fmt::Display,
+        T: std::ops::Sub<Output = T> + Copy + std::fmt::Display,
     {
-        let current_string = match formatter.as_ref() {
+        let current_string = match fmt.as_ref() {
             Some(f) => f(current),
             None => current.to_string(),
         };
-        let delta_string = match formatter {
+        let delta_string = match fmt {
             Some(f) => {
                 let tmp = current - initial;
                 f(tmp)
@@ -584,4 +584,7 @@ fn format_number(int: impl Into<u64>) -> String {
         .unwrap()
         .join(",");
     num
+}
+fn format_accuracy(acc: f32) -> String {
+    format!("{:.2}%", acc)
 }
