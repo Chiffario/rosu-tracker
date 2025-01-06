@@ -21,6 +21,7 @@ use super::socket::{Connection, Event, Message};
 
 /// The application model stores app-specific state used to describe its interface and
 /// drive its logic.
+#[derive(Default)]
 pub struct AppModel {
     /// Application state which is managed by the COSMIC runtime.
     core: Core,
@@ -38,9 +39,15 @@ pub struct AppModel {
     user_extended: Option<UserExtended>,
     user_tops: Option<Vec<Score>>,
     user_firsts: Option<Vec<Score>>,
+    // First received (a.k.a. initial) user data
+    initial_user_extended: Option<UserExtended>,
+    initial_user_tops: Option<Vec<Score>>,
+    initial_user_firsts: Option<Vec<Score>>,
 }
 
+#[derive(Default)]
 pub enum State {
+    #[default]
     Disconnected,
     Connected(Connection),
 }
@@ -112,19 +119,10 @@ impl Application for AppModel {
             config: cosmic_config::Config::new(Self::APP_ID, AppConfig::VERSION)
                 .map(|context| match AppConfig::get_entry(&context) {
                     Ok(config) => config,
-                    Err((_errors, config)) => {
-                        // for why in errors {
-                        //     tracing::error!(%why, "error loading app config");
-                        // }
-
-                        config
-                    }
+                    Err((_errors, config)) => config,
                 })
                 .unwrap_or_default(),
-            state: State::Disconnected,
-            user_extended: None,
-            user_tops: None,
-            user_firsts: None,
+            ..Default::default()
         };
 
         let rename = app.update_title();
@@ -291,7 +289,9 @@ where
 
         let title = title3("rosu-tracker");
 
-        let link = link("").on_press(AppMessage::OpenRepositoryUrl).padding(0);
+        let link = link("Source code")
+            .on_press(AppMessage::OpenRepositoryUrl)
+            .padding(0);
 
         cosmic::widget::column()
             // .push(icon)
@@ -318,9 +318,12 @@ where
         }
     }
     fn user_view(&self) -> Element<AppMessage> {
-        let user = self.user_extended.as_ref();
-        match user {
-            Some(user_inner) => self.draw_user(user_inner),
+        let user_current = self.user_extended.as_ref();
+        match user_current {
+            Some(user_inner) => self.draw_user(
+                user_inner,
+                self.initial_user_extended.as_ref().unwrap_or(user_inner),
+            ),
             None => title1("Waiting")
                 .apply(container)
                 .width(Length::Fill)
@@ -359,9 +362,9 @@ where
         )
         .into()
     }
-    fn draw_user(&self, user: &UserExtended) -> Element<AppMessage> {
-        let title = self.centered_username(user);
-        let data = cosmic::widget::container(self.user_extended_data(user));
+    fn draw_user(&self, current: &UserExtended, initial: &UserExtended) -> Element<AppMessage> {
+        let title = self.centered_username(current);
+        let data = cosmic::widget::container(self.user_extended_data(current, initial));
         let children = cosmic::widget::column()
             .push(title)
             .push(data)
@@ -381,30 +384,84 @@ where
         username.into()
     }
 
-    fn user_extended_data(&self, user: &UserExtended) -> Element<AppMessage> {
+    fn user_extended_data(
+        &self,
+        current: &UserExtended,
+        initial: &UserExtended,
+    ) -> Element<AppMessage> {
         let items = cosmic::widget::column()
             .width(Length::Fill)
             .align_x(Horizontal::Center)
             .width(Length::Fill)
             .padding(20);
-        let stats = user.statistics.as_ref();
-        let children = vec![
-            stats.map(|x| self.make_pair("pp", x.pp.to_string())),
-            stats.map(|x| self.make_pair("rank", x.global_rank.unwrap_or(0).to_string())),
-            stats.map(|x| self.make_pair("country rank", x.country_rank.unwrap_or(0).to_string())),
-            Some(self.make_pair(
-                "First places",
-                user.scores_first_count.unwrap_or(0).to_string(),
-            )),
-            stats.map(|x| self.make_pair("score", x.ranked_score.apply(format_number))),
+        let current_statistics = current.statistics.as_ref();
+        let initial_statistics = initial.statistics.as_ref();
+        let children = [
+            self.make_pair::<f32>(
+                "pp",
+                current_statistics.unwrap().pp,
+                initial_statistics.unwrap().pp,
+                None::<fn(f32) -> String>,
+            ),
+            self.make_pair(
+                "rank",
+                current_statistics.unwrap().global_rank.unwrap_or(0),
+                initial_statistics.unwrap().global_rank.unwrap_or(0),
+                None::<fn(u32) -> String>,
+            ),
+            self.make_pair::<u32>(
+                "country rank",
+                current_statistics.unwrap().country_rank.unwrap_or(0),
+                initial_statistics.unwrap().country_rank.unwrap_or(0),
+                None::<fn(u32) -> String>,
+            ),
+            self.make_pair::<u32>(
+                "peak rank",
+                current.highest_rank.as_ref().unwrap().rank,
+                initial.highest_rank.as_ref().unwrap().rank,
+                None::<fn(u32) -> String>,
+            ),
+            self.make_pair::<f32>(
+                "accuracy",
+                current_statistics.unwrap().accuracy,
+                initial_statistics.unwrap().accuracy,
+                None::<fn(f32) -> String>,
+            ),
+            self.make_pair(
+                "ranked score",
+                current_statistics.as_ref().unwrap().ranked_score,
+                initial_statistics.as_ref().unwrap().ranked_score,
+                Some(format_number),
+            ),
         ];
-        let children = children.into_iter().flatten();
+        let children = children.into_iter();
 
         let items = items.extend(children);
         items.into()
     }
 
-    fn make_pair<'a>(&'a self, title: &'a str, data: impl Into<String>) -> Element<'a, AppMessage> {
+    fn make_pair<'a, T>(
+        &'a self,
+        title: &'a str,
+        current: T,
+        initial: T,
+        formatter: Option<impl Fn(T) -> String>,
+    ) -> Element<'a, AppMessage>
+    where
+        T: ToString + std::ops::Sub<Output = T> + Copy,
+        <T as std::ops::Sub>::Output: std::fmt::Display,
+    {
+        let current_string = match formatter.as_ref() {
+            Some(f) => f(current),
+            None => current.to_string(),
+        };
+        let delta_string = match formatter {
+            Some(f) => {
+                let tmp = current - initial;
+                f(tmp)
+            }
+            None => format!("{}", current - initial),
+        };
         container(
             row![
                 widget::text::Text::new(title)
@@ -412,7 +469,11 @@ where
                     .size(16)
                     .width(Length::FillPortion(1)),
                 // cosmic::widget::divider::vertical::default(),
-                widget::text::Text::new(data.into())
+                widget::text::Text::new(current_string)
+                    .align_x(Horizontal::Right)
+                    .size(16)
+                    .width(Length::FillPortion(1)),
+                cosmic::widget::text(delta_string)
                     .align_x(Horizontal::Right)
                     .size(16)
                     .width(Length::FillPortion(1))
@@ -429,15 +490,18 @@ where
     fn draw_score<'a>(&self, score: &Score) -> container::Container<'_, AppMessage, Theme> {
         let mapset = score.mapset.as_ref().unwrap();
         let map = score.map.as_ref().unwrap();
-        let title_diff: Element<AppMessage> =
-            cosmic::widget::button::link(format!("{} [{}]", mapset.title.clone(), &map.version))
-                .on_press(AppMessage::LaunchUrl(format!(
-                    "https://osu.ppy.sh/scores/{}",
-                    score.id
-                )))
-                .width(Length::Fill)
-                .padding(0)
-                .into();
+        let title_diff: Element<AppMessage> = cosmic::widget::button::custom(
+            cosmic::widget::text(format!("{} [{}]", mapset.title.clone(), &map.version))
+                .wrapping(widget::text::Wrapping::None),
+        )
+        .class(theme::Button::Link)
+        .on_press(AppMessage::LaunchUrl(format!(
+            "https://osu.ppy.sh/scores/{}",
+            score.id
+        )))
+        .width(Length::Fill)
+        .padding(0)
+        .into();
         let artist = cosmic::widget::text(mapset.artist.clone()).height(Length::Fill);
         let date = cosmic::widget::text(score.ended_at.date().to_string());
         let pp = cosmic::widget::text(format!(
