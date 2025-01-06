@@ -8,7 +8,7 @@ default = ["gui"]
 gui = []
 
 [dependencies]
-rosu-v2 = { git = "https://github.com/Chiffario/rosu-v2", branch = "lazer", features = ["serialize"] }
+rosu-v2 = { git = "https://github.com/MaxOhn/rosu-v2", branch = "lazer", features = ["serialize"] }
 rosu-pp = { git = "https://github.com/MaxOhn/rosu-pp", branch = "main" }
 tokio-tungstenite = "0.24.0"
 tokio = { version = "1.41.1", features = ["rt-multi-thread"] }
