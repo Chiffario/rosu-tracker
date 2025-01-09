@@ -105,56 +105,56 @@ trait IntoMessage<T> {
 
 impl IntoMessage<UserExtended> for User {
     fn into_message(value: UserExtended) -> Message {
-        Message::User(value.into())
+        Message::User(value)
     }
 }
 
 impl IntoMessage<Vec<Score>> for Tops {
     fn into_message(value: Vec<Score>) -> Message {
-        Message::Tops(value.into())
+        Message::Tops(value)
     }
 }
 
 impl IntoMessage<Vec<Score>> for Firsts {
     fn into_message(value: Vec<Score>) -> Message {
-        Message::Firsts(value.into())
+        Message::Firsts(value)
     }
 }
 
 impl IntoMessage<Vec<Score>> for Recent {
     fn into_message(value: Vec<Score>) -> Message {
-        Message::Recent(value.into())
+        Message::Recent(value)
     }
 }
 
 struct User(UserExtended);
 
-impl Into<UserExtended> for User {
-    fn into(self) -> UserExtended {
-        self.0
+impl From<User> for UserExtended {
+    fn from(val: User) -> Self {
+        val.0
     }
 }
 
 struct Tops(Vec<Score>);
 
-impl Into<Vec<Score>> for Tops {
-    fn into(self) -> Vec<Score> {
-        self.0
+impl From<Tops> for Vec<Score> {
+    fn from(val: Tops) -> Self {
+        val.0
     }
 }
 struct Firsts(Vec<Score>);
 
-impl Into<Vec<Score>> for Firsts {
-    fn into(self) -> Vec<Score> {
-        self.0
+impl From<Firsts> for Vec<Score> {
+    fn from(val: Firsts) -> Self {
+        val.0
     }
 }
 
 struct Recent(Vec<Score>);
 
-impl Into<Vec<Score>> for Recent {
-    fn into(self) -> Vec<Score> {
-        self.0
+impl From<Recent> for Vec<Score> {
+    fn from(val: Recent) -> Self {
+        val.0
     }
 }
 #[allow(dead_code, reason = "WIP")]

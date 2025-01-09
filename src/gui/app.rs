@@ -449,6 +449,36 @@ where
                 initial_statistics.ranked_score,
                 Some(format_number),
             ),
+            self.make_pair(
+                "A ranks",
+                current_statistics.grade_counts.a,
+                initial_statistics.grade_counts.a,
+                None::<fn(i32) -> String>,
+            ),
+            self.make_pair(
+                "S ranks",
+                current_statistics.grade_counts.s,
+                initial_statistics.grade_counts.s,
+                None::<fn(i32) -> String>,
+            ),
+            self.make_pair(
+                "SS ranks",
+                current_statistics.grade_counts.ss,
+                initial_statistics.grade_counts.ss,
+                None::<fn(i32) -> String>,
+            ),
+            self.make_pair(
+                "SH ranks",
+                current_statistics.grade_counts.sh,
+                initial_statistics.grade_counts.sh,
+                None::<fn(i32) -> String>,
+            ),
+            self.make_pair(
+                "SSH ranks",
+                current_statistics.grade_counts.ssh,
+                initial_statistics.grade_counts.ssh,
+                None::<fn(i32) -> String>,
+            ),
         ];
         let children = children.into_iter();
 
@@ -514,6 +544,7 @@ where
             "https://osu.ppy.sh/scores/{}",
             score.id
         )))
+        // TODO: Change to Length::Shrink and add horizontal_space()
         .width(Length::Fill)
         .padding(0)
         .into();
