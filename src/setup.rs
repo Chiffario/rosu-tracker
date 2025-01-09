@@ -37,8 +37,9 @@ pub async fn thread_init() -> eyre::Result<()> {
     path.push("rosu-tracker/");
     path.push("config.toml");
 
-    let config = read_to_string(File::open(path).unwrap()).unwrap();
-    let api_conf: Api = toml::from_str(&config).unwrap();
+    let config = read_to_string(File::open(path).map_err(|e| eyre!("Couldn't open a file: {e}"))?)
+        .map_err(|e| eyre!("Couldn't read a file: {e}"))?;
+    let api_conf: Api = toml::from_str(&config).map_err(|e| eyre!("Malformed config file: {e}"))?;
     println!("Configuration constructed");
 
     let clients = Clients::default();
