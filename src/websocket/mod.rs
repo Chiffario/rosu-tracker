@@ -11,7 +11,7 @@ use hyper::{
 use hyper_util::rt::tokio::TokioIo;
 use rosu_v2::Osu;
 use std::{sync::Arc, time::Duration};
-use tokio::time::{sleep, Interval};
+use tokio::time::sleep;
 use tokio_tungstenite::{
     tungstenite::{handshake::derive_accept_key, protocol::Role, Message},
     WebSocketStream,

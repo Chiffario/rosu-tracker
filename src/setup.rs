@@ -1,4 +1,4 @@
-use directories::{BaseDirs, ProjectDirs};
+use directories::BaseDirs;
 use eyre::eyre;
 use std::{fs::File, io::read_to_string, sync::Arc};
 use tokio::sync::Mutex;

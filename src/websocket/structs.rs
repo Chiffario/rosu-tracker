@@ -3,7 +3,7 @@ use std::sync::Arc;
 use hyper::upgrade::Upgraded;
 use hyper_util::rt::TokioIo;
 use rosu_v2::prelude::{Score, UserExtended};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 use tokio_tungstenite::WebSocketStream;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -21,7 +21,7 @@ pub struct WsClient {
 }
 
 pub type Arm<T> = Arc<Mutex<T>>;
-pub type ArRwlock<T> = Arc<RwLock<T>>;
+// pub type ArRwlock<T> = Arc<RwLock<T>>;
 pub type Clients = Arm<Vec<WsClient>>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct TrackedData {
