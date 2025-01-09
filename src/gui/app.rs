@@ -37,12 +37,12 @@ pub struct AppModel {
     // State of the websocket connection
     state: State,
     // Latest received user data
-    user_extended: Option<UserExtended>,
+    user_extended: Option<Box<UserExtended>>,
     user_tops: Option<Vec<Score>>,
     user_firsts: Option<Vec<Score>>,
     user_recent: Option<Vec<Score>>,
     // First received (a.k.a. initial) user data
-    initial_user_extended: Option<UserExtended>,
+    initial_user_extended: Option<Box<UserExtended>>,
     initial_user_tops: Option<Vec<Score>>,
     initial_user_firsts: Option<Vec<Score>>,
 }
@@ -198,10 +198,10 @@ impl Application for AppModel {
     fn subscription(&self) -> Subscription<Self::Message> {
         Subscription::batch(vec![
             // Create a subscription which emits updates through a channel.
-            Subscription::run(socket::connect_user).map(|x| AppMessage::ReceiveMessage(x)),
-            Subscription::run(socket::connect_tops).map(|x| AppMessage::ReceiveMessage(x)),
-            Subscription::run(socket::connect_firsts).map(|x| AppMessage::ReceiveMessage(x)),
-            Subscription::run(socket::connect_recent).map(|x| AppMessage::ReceiveMessage(x)),
+            Subscription::run(socket::connect_user).map(AppMessage::ReceiveMessage),
+            Subscription::run(socket::connect_tops).map(AppMessage::ReceiveMessage),
+            Subscription::run(socket::connect_firsts).map(AppMessage::ReceiveMessage),
+            Subscription::run(socket::connect_recent).map(AppMessage::ReceiveMessage),
             // Watch for application configuration changes.
             self.core()
                 .watch_config::<AppConfig>(Self::APP_ID)
@@ -259,19 +259,28 @@ impl Application for AppModel {
                     Message::Disconnected => {}
                     Message::User(user_extended) => {
                         debug!("User received: {}", user_extended.username);
-                        self.user_extended = Some(user_extended);
+                        self.user_extended = Some(user_extended.clone());
+                        if self.initial_user_extended.is_none() {
+                            self.initial_user_extended = Some(user_extended);
+                        }
                     }
                     Message::Tops(vec) => {
                         debug!("Top plays received: {}", vec.len());
-                        self.user_tops = Some(vec);
+                        self.user_tops = Some(vec.clone());
+                        if self.initial_user_tops.is_none() {
+                            self.initial_user_tops = Some(vec);
+                        }
                     }
                     Message::Firsts(vec) => {
                         debug!("Firsts received: {}", vec.len());
-                        self.user_firsts = Some(vec);
+                        self.user_firsts = Some(vec.clone());
+                        if self.initial_user_firsts.is_none() {
+                            self.initial_user_firsts = Some(vec);
+                        }
                     }
                     Message::Recent(vec) => {
                         debug!("Recent received: {}", vec.len());
-                        self.user_recent = Some(vec)
+                        self.user_recent = Some(vec);
                     }
                 },
             },
@@ -347,20 +356,20 @@ where
         }
     }
     fn tops_view(&self) -> Element<AppMessage> {
-        self.draw_scores(&self.user_tops.as_ref().unwrap_or(&vec![]))
+        self.draw_scores(self.user_tops.as_ref().unwrap_or(&vec![]))
     }
     fn firsts_view(&self) -> Element<AppMessage> {
-        self.draw_scores(&self.user_firsts.as_ref().unwrap_or(&vec![]))
+        self.draw_scores(self.user_firsts.as_ref().unwrap_or(&vec![]))
     }
     fn recent_view(&self) -> Element<AppMessage> {
-        self.draw_scores(&self.user_recent.as_ref().unwrap_or(&vec![]))
+        self.draw_scores(self.user_recent.as_ref().unwrap_or(&vec![]))
     }
     fn draw_scores(&self, scores: &[Score]) -> Element<AppMessage> {
         let mut score_text = scores
             .iter()
             .map(|score| self.draw_score(score))
             .collect::<Vec<_>>();
-        if scores.len() == 0 {
+        if scores.is_empty() {
             score_text = vec![container(cosmic::widget::text("No scores!"))];
         }
         scrollable(
@@ -532,7 +541,7 @@ where
         .into()
     }
 
-    fn draw_score<'a>(&self, score: &Score) -> container::Container<'_, AppMessage, Theme> {
+    fn draw_score(&self, score: &Score) -> container::Container<'_, AppMessage, Theme> {
         let mapset = score.mapset.as_ref().unwrap();
         let map = score.map.as_ref().unwrap();
         let title_diff: Element<AppMessage> = cosmic::widget::button::custom(

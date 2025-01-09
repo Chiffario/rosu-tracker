@@ -93,7 +93,7 @@ pub enum Event {
 pub enum Message {
     Connected,
     Disconnected,
-    User(UserExtended),
+    User(Box<UserExtended>),
     Tops(Vec<Score>),
     Firsts(Vec<Score>),
     Recent(Vec<Score>),
@@ -105,7 +105,7 @@ trait IntoMessage<T> {
 
 impl IntoMessage<UserExtended> for User {
     fn into_message(value: UserExtended) -> Message {
-        Message::User(value)
+        Message::User(Box::new(value))
     }
 }
 
