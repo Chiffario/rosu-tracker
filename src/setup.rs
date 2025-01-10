@@ -1,10 +1,16 @@
+use cosmic::cosmic_config;
 use directories::BaseDirs;
 use eyre::eyre;
-use std::{fs::File, io::read_to_string, sync::Arc};
+use std::{
+    fs::File,
+    io::{self, read_to_string, Write},
+    path::{Path, PathBuf},
+    sync::{self, Arc, LazyLock},
+};
 use tokio::sync::Mutex;
 
 use rosu_v2::Osu;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::websocket::{
@@ -12,40 +18,49 @@ use crate::websocket::{
     structs::{Arm, Clients, TrackedData},
 };
 
-#[derive(Deserialize, Clone)]
+static CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+    BaseDirs::new()
+        .expect("Please create a configuration directory")
+        .config_local_dir()
+        .to_path_buf()
+        .join("rosu-tracker")
+        .join("config.toml")
+});
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Api {
     pub id: String,
     pub secret: String,
     pub username: String,
 }
 
+impl Api {
+    pub(crate) fn write(&self) -> eyre::Result<()> {
+        let config = toml::to_string(self).map_err(eyre::Error::new)?;
+        let mut f = File::create(CONFIG_DIR.as_path()).map_err(eyre::Error::new)?;
+        f.write(config.as_bytes()).map_err(eyre::Error::new)?;
+        Ok(())
+    }
+}
+
 pub async fn thread_init() -> eyre::Result<()> {
-    // pub async fn thread_init() -> eyre::Result<Vec<AbortHandle>> {
     // Setup tracing
     let subscriber = tracing_subscriber::FmtSubscriber::builder()
         .with_target(false)
         .finish();
     tracing::subscriber::set_global_default(subscriber)?;
     // Parse user's configuration
-    let mut path = match BaseDirs::new() {
-        Some(dir) => dir.config_local_dir().to_owned(),
-        None => {
-            // TODO: Give an example path
-            return Err(eyre!("Please create a configuration directory"));
-        }
-    };
-    path.push("rosu-tracker/");
-    path.push("config.toml");
-
-    let config = read_to_string(File::open(path).map_err(|e| eyre!("Couldn't open a file: {e}"))?)
-        .map_err(|e| eyre!("Couldn't read a file: {e}"))?;
+    let config = read_to_string(
+        File::open(CONFIG_DIR.as_path()).map_err(|e| eyre!("Couldn't open a file: {e}"))?,
+    )
+    .map_err(|e| eyre!("Couldn't read a file: {e}"))?;
     let api_conf: Api = toml::from_str(&config).map_err(|e| eyre!("Malformed config file: {e}"))?;
     println!("Configuration constructed");
 
     let clients = Clients::default();
     // Prep empty websocket clients
     tracing::debug!("Constructed clients");
-
+    println!("{CONFIG_DIR:?}");
     let osu = Arc::new(
         Osu::new(api_conf.id.parse().unwrap(), &api_conf.secret)
             .await

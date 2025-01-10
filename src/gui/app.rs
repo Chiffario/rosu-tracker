@@ -2,7 +2,8 @@ use crate::gui::config::Config as AppConfig;
 use crate::gui::socket;
 use crate::setup::thread_init;
 use cosmic::app::{context_drawer, Core, Task};
-use cosmic::cosmic_config::{self, CosmicConfigEntry};
+use cosmic::cosmic_config::{self, Config, ConfigGet, ConfigUpdate, CosmicConfigEntry};
+use cosmic::cosmic_theme::palette::cast::ComponentsInto;
 use cosmic::iced::advanced::widget::{self};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, Length, Padding, Subscription};
@@ -16,7 +17,7 @@ use cosmic::widget::{container, icon, menu, nav_bar, scrollable, vertical_space}
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element, Theme};
 use rosu_v2::prelude::{Score, UserExtended};
 use std::collections::HashMap;
-use tracing::debug;
+use tracing::{debug, error};
 
 use super::socket::{Connection, Event, Message};
 
@@ -33,6 +34,7 @@ pub struct AppModel {
     /// Key bindings for the application's menu bar.
     key_binds: HashMap<menu::KeyBind, MenuAction>,
     // Configuration data that persists between application runs.
+    config_handler: Option<Config>,
     config: AppConfig,
     // State of the websocket connection
     state: State,
@@ -72,7 +74,6 @@ impl Application for AppModel {
 
     /// Data that your application receives to its init method.
     type Flags = ();
-
     /// Messages which the application and its widgets will emit.
     type Message = AppMessage;
 
@@ -116,6 +117,24 @@ impl Application for AppModel {
             // text-html looks like Earth, makes sense for leaderboards, fight me
             .icon(icon::from_name("text-html-symbolic"));
 
+        let (config_handler, config) =
+            match cosmic_config::Config::new(Self::APP_ID, AppConfig::VERSION) {
+                Ok(config_handler) => {
+                    let config = match AppConfig::get_entry(&config_handler) {
+                        Ok(ok) => ok,
+                        Err((errs, config)) => {
+                            error!("errors loading config: {:?}", errs);
+                            config
+                        }
+                    };
+                    (Some(config_handler), config)
+                }
+                Err(err) => {
+                    error!("failed to create config handler: {}", err);
+                    (None, AppConfig::default())
+                }
+            };
+
         // Construct the app model with the runtime's core.
         let mut app = AppModel {
             core,
@@ -123,12 +142,8 @@ impl Application for AppModel {
             nav,
             key_binds: HashMap::new(),
             // Optional configuration file for an application.
-            config: cosmic_config::Config::new(Self::APP_ID, AppConfig::VERSION)
-                .map(|context| match AppConfig::get_entry(&context) {
-                    Ok(config) => config,
-                    Err((_errors, config)) => config,
-                })
-                .unwrap_or_default(),
+            config_handler,
+            config,
             ..Default::default()
         };
 
