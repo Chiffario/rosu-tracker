@@ -22,17 +22,17 @@ use crate::{
     constants::{BASE_IP, FIRSTS_ENDPOINT, RECENT_ENDPOINT, TOPS_ENDPOINT, USER_ENDPOINT},
     setup::Api,
 };
-use eyre::Result;
+use color_eyre::{eyre::Error, Result};
 use structs::*;
 
 #[tracing::instrument(name = "handle_clients", skip_all)]
 pub async fn handle_clients(clients: Clients, values: Arm<TrackedData>) {
-    let lock = values.lock().await;
-    if lock.user_extended.is_none() {
+    let user_lock = values.lock().await;
+    if user_lock.user_extended.is_none() {
         return;
     }
     let (ser_profile, ser_tops, ser_firsts, ser_recent) = {
-        let data = &*lock;
+        let data = &*user_lock;
         (
             serde_json::to_string(&data.user_extended).unwrap(),
             serde_json::to_string(&data.user_scores).unwrap(),
@@ -40,6 +40,7 @@ pub async fn handle_clients(clients: Clients, values: Arm<TrackedData>) {
             serde_json::to_string(&data.user_recent).unwrap(),
         )
     };
+    drop(user_lock);
     debug!("Constructed serialized data");
     let mut clients = clients.lock().await;
     clients.retain_mut(|socket| {
@@ -77,6 +78,7 @@ pub async fn handle_clients(clients: Clients, values: Arm<TrackedData>) {
             true
         })
     });
+    drop(clients);
     tokio::time::sleep(Duration::from_secs(1)).await;
 }
 #[tracing::instrument(name = "server_thread")]
@@ -134,6 +136,7 @@ pub async fn fetch_thread(osu: Arc<Osu>, tracked_data: Arm<TrackedData>, api_con
             }
             tracked_data.user_extended = Some(fetched_user);
             tracked_data.user_recent = Some(fetched_recent.await.unwrap_or_default());
+            drop(tracked_data);
             let _ = sleep(Duration::from_secs(5)).await;
         } else {
             tracing::debug!("Tracked user has no data");
@@ -154,7 +157,7 @@ async fn serve(
         RECENT_ENDPOINT => serve_ws(clients, req, WsKind::Recent).await,
         _ => {
             println!("This URI doesn't exist");
-            Err(eyre::Error::msg("This URI doesn't exist"))
+            Err(Error::msg("This URI doesn't exist"))
         }
     }
 }

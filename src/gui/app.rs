@@ -1,9 +1,8 @@
-use crate::gui::config::Config as AppConfig;
+use crate::config::Config as AppConfig;
 use crate::gui::socket;
 use crate::setup::thread_init;
 use cosmic::app::{context_drawer, Core, Task};
-use cosmic::cosmic_config::{self, Config, ConfigGet, ConfigUpdate, CosmicConfigEntry};
-use cosmic::cosmic_theme::palette::cast::ComponentsInto;
+use cosmic::cosmic_config::{self, Config, CosmicConfigEntry};
 use cosmic::iced::advanced::widget::{self};
 use cosmic::iced::alignment::{Horizontal, Vertical};
 use cosmic::iced::{Alignment, Length, Padding, Subscription};
@@ -19,7 +18,7 @@ use rosu_v2::prelude::{Score, UserExtended};
 use std::collections::HashMap;
 use tracing::{debug, error};
 
-use super::socket::{Connection, Event, Message};
+use super::socket::{Event, Message};
 
 /// The application model stores app-specific state used to describe its interface and
 /// drive its logic.
@@ -34,6 +33,10 @@ pub struct AppModel {
     /// Key bindings for the application's menu bar.
     key_binds: HashMap<menu::KeyBind, MenuAction>,
     // Configuration data that persists between application runs.
+    #[allow(
+        dead_code,
+        reason = "The config isn't editable in runtime yet, but the handler is necessary"
+    )]
     config_handler: Option<Config>,
     config: AppConfig,
     // State of the websocket connection
@@ -53,7 +56,7 @@ pub struct AppModel {
 pub enum State {
     #[default]
     Disconnected,
-    Connected(Connection),
+    Connected,
 }
 /// Messages emitted by the application and its widgets.
 #[derive(Debug, Clone)]
@@ -78,7 +81,7 @@ impl Application for AppModel {
     type Message = AppMessage;
 
     /// Unique identifier in RDNN (reverse domain name notation) format.
-    const APP_ID: &'static str = "com.chiffa.rosuTracker";
+    const APP_ID: &'static str = crate::constants::APP_ID;
 
     fn core(&self) -> &Core {
         &self.core
@@ -150,7 +153,7 @@ impl Application for AppModel {
         let rename = app.update_title();
 
         // Create a startup command that starts the socket server.
-        let command = Task::perform(thread_init(), |_| {
+        let command = Task::perform(thread_init(None), |_| {
             cosmic::app::Message::App(AppMessage::StartServer)
         });
 
@@ -263,8 +266,8 @@ impl Application for AppModel {
             },
             AppMessage::StartServer => tracing::debug!("Iced: Started websocket server"),
             AppMessage::ReceiveMessage(event) => match event {
-                Event::Connected(connection) => {
-                    self.state = State::Connected(connection);
+                Event::Connected(_connection) => {
+                    self.state = State::Connected;
                 }
                 Event::Disconnected => {
                     self.state = State::Disconnected;
@@ -371,13 +374,13 @@ where
         }
     }
     fn tops_view(&self) -> Element<AppMessage> {
-        self.draw_scores(self.user_tops.as_ref().unwrap_or(&vec![]))
+        self.draw_scores(self.user_tops.as_ref().unwrap().as_slice())
     }
     fn firsts_view(&self) -> Element<AppMessage> {
-        self.draw_scores(self.user_firsts.as_ref().unwrap_or(&vec![]))
+        self.draw_scores(self.user_firsts.as_ref().unwrap().as_slice())
     }
     fn recent_view(&self) -> Element<AppMessage> {
-        self.draw_scores(self.user_recent.as_ref().unwrap_or(&vec![]))
+        self.draw_scores(self.user_recent.as_ref().unwrap().as_slice())
     }
     fn draw_scores(&self, scores: &[Score]) -> Element<AppMessage> {
         let mut score_text = scores

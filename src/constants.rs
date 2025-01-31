@@ -16,3 +16,6 @@ pub const TOPS_URI: &str = constcat::concat!(BASE_URI, TOPS_ENDPOINT);
 pub const FIRSTS_URI: &str = constcat::concat!(BASE_URI, FIRSTS_ENDPOINT);
 #[cfg(feature = "gui")]
 pub const RECENT_URI: &str = constcat::concat!(BASE_URI, RECENT_ENDPOINT);
+
+pub const CONFIG_VERSION: u64 = 1;
+pub(crate) const APP_ID: &'static str = "com.chiffa.rosuTracker";

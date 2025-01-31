@@ -1,70 +1,62 @@
-use cosmic::cosmic_config;
-use directories::BaseDirs;
-use eyre::eyre;
-use std::{
-    fs::File,
-    io::{self, read_to_string, Write},
-    path::{Path, PathBuf},
-    sync::{self, Arc, LazyLock},
-};
+use color_eyre::eyre::eyre;
+use color_eyre::Result;
+use cosmic::cosmic_config::{self, ConfigGet};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use rosu_v2::Osu;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, error};
 
 use crate::websocket::{
     fetch_thread, handle_clients, server_thread,
     structs::{Arm, Clients, TrackedData},
 };
 
-static CONFIG_DIR: LazyLock<PathBuf> = LazyLock::new(|| {
-    BaseDirs::new()
-        .expect("Please create a configuration directory")
-        .config_local_dir()
-        .to_path_buf()
-        .join("rosu-tracker")
-        .join("config.toml")
-});
-
-#[derive(Deserialize, Serialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
 pub struct Api {
     pub id: String,
     pub secret: String,
     pub username: String,
 }
 
-impl Api {
-    pub(crate) fn write(&self) -> eyre::Result<()> {
-        let config = toml::to_string(self).map_err(eyre::Error::new)?;
-        let mut f = File::create(CONFIG_DIR.as_path()).map_err(eyre::Error::new)?;
-        f.write(config.as_bytes()).map_err(eyre::Error::new)?;
-        Ok(())
-    }
+fn get_config_cosmic() -> Result<Api> {
+    let config_handler =
+        cosmic_config::Config::new(crate::constants::APP_ID, crate::constants::CONFIG_VERSION)?;
+    Ok(Api {
+        id: config_handler.get::<String>("user_client")?,
+        secret: config_handler.get::<String>("user_secret")?,
+        username: config_handler.get::<String>("tracked_user_name")?,
+    })
 }
 
-pub async fn thread_init() -> eyre::Result<()> {
+pub fn set_cosmic_config(new_config: Api) -> () {
+    let config_handler =
+        cosmic_config::Config::new(crate::constants::APP_ID, crate::constants::CONFIG_VERSION)
+            .unwrap();
+    let mut config = crate::config::Config::default();
+    let _ = config.set_user_client(&config_handler, new_config.id);
+    let _ = config.set_user_secret(&config_handler, new_config.secret);
+    let _ = config.set_tracked_user_name(&config_handler, new_config.username);
+}
+pub async fn thread_init(config: Option<Api>) -> Result<()> {
+    if let Some(cfg) = config {
+        set_cosmic_config(cfg);
+    }
     // Setup tracing
     let subscriber = tracing_subscriber::FmtSubscriber::builder()
         .with_target(false)
         .finish();
     tracing::subscriber::set_global_default(subscriber)?;
-    // Parse user's configuration
-    let config = read_to_string(
-        File::open(CONFIG_DIR.as_path()).map_err(|e| eyre!("Couldn't open a file: {e}"))?,
-    )
-    .map_err(|e| eyre!("Couldn't read a file: {e}"))?;
-    let api_conf: Api = toml::from_str(&config).map_err(|e| eyre!("Malformed config file: {e}"))?;
-    println!("Configuration constructed");
 
     let clients = Clients::default();
+    let api_conf = get_config_cosmic()?;
     // Prep empty websocket clients
-    tracing::debug!("Constructed clients");
-    println!("{CONFIG_DIR:?}");
+    debug!("Constructed clients");
     let osu = Arc::new(
         Osu::new(api_conf.id.parse().unwrap(), &api_conf.secret)
             .await
-            .unwrap(),
+            .map_err(|e| eyre!("Failed to initialise osu client: {e}"))?,
     );
 
     let osu_user = osu.user(&api_conf.username);
@@ -93,18 +85,27 @@ pub async fn thread_init() -> eyre::Result<()> {
     // Setup a thread to run the server
     let tracker = tracked_data.clone();
     let server_thread = tokio::spawn(async { server_thread(clients, tracker).await });
-    let user = osu_user.await.ok();
-    let scores = osu_user_scores.await.ok();
-    let firsts = osu_user_firsts.await.ok();
-    let recent = osu_user_recent.await.ok();
+    let user = osu_user
+        .await
+        .inspect_err(|e| error!("failed to fetch user: {}", e))
+        .ok();
+    let scores = osu_user_scores
+        .await
+        .inspect_err(|e| error!("failed to fetch top scores: {}", e))
+        .ok();
+    let firsts = osu_user_firsts
+        .await
+        .inspect_err(|e| error!("failed to fetch first place scores: {}", e))
+        .ok();
+    let recent = osu_user_recent
+        .await
+        .inspect_err(|e| error!("failed to fetch recent scores: {}", e))
+        .ok();
     tracked_data
         .lock()
         .await
         .insert(user, scores, firsts, recent);
     debug!("Spawned server thread");
-    let _ = fetch_thread.await;
-    let _ = server_thread.await;
-    let _ = client_thread.await;
-    // Ok(handles)
+    let _ = tokio::join!(fetch_thread, server_thread, client_thread);
     Ok(())
 }

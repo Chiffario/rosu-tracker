@@ -17,7 +17,7 @@ impl Default for Config {
         Self {
             user_client: String::new(),
             user_secret: String::new(),
-            tracked_user_name: String::from("Chiffa"),
+            tracked_user_name: String::new(),
         }
     }
 }
