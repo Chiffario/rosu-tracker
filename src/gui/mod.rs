@@ -1,11 +1,11 @@
 use crate::setup::{set_cosmic_config, Api};
-use ::cosmic::{
+use app::AppModel;
+use cosmic::{
     app::{run, Settings},
     iced::{self, Limits},
 };
-use app::AppModel;
 pub mod app;
-
+mod components;
 mod socket;
 /// Initialise the gui with its local runtime
 // pub fn init() -> iced::Result {
