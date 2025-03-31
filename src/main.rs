@@ -5,6 +5,8 @@ use setup::Api;
 #[cfg(feature = "gui")]
 mod gui;
 
+mod utils;
+mod api;
 mod config;
 mod constants;
 mod setup;

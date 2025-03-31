@@ -1,24 +1,35 @@
+use ::image::{DynamicImage, GenericImageView};
 use cosmic::iced::advanced::widget::{self};
 use cosmic::iced::alignment::Horizontal;
-use cosmic::iced::{Alignment, Length, Padding};
-use cosmic::iced_widget::{column, row};
+use cosmic::iced::wgpu::naga::FastHashMap;
+use cosmic::iced::{Alignment, Background, Length, Padding};
+use cosmic::iced_widget::image::Handle;
+use cosmic::iced_widget::{column, row, stack};
 use cosmic::prelude::CollectionWidget;
 use cosmic::theme::Container;
-use cosmic::widget::text;
 use cosmic::widget::text::{title1, title3};
-use cosmic::widget::{container, scrollable, vertical_space};
+use cosmic::widget::{container, scrollable, vertical_space, Image};
+use cosmic::widget::{image, text};
 use cosmic::{theme, Element, Theme};
 use rosu_v2::prelude::{Score, UserExtended};
 
 use super::app::AppMessage;
 
-pub fn draw_scores(scores: &[Score]) -> Element<AppMessage> {
+pub fn draw_scores<'a>(
+    scores: &'a [Score],
+    background: &'a FastHashMap<u32, Option<DynamicImage>>,
+) -> Element<'a, AppMessage> {
     let mut score_text = scores
         .iter()
-        .map(|score| draw_score(score))
+        .map(|score| {
+            let bg = background
+                .get(&score.mapset.as_ref().unwrap().mapset_id)
+                .unwrap();
+            draw_score(score, bg)
+        })
         .collect::<Vec<_>>();
     if scores.is_empty() {
-        score_text = vec![container(cosmic::widget::text("No scores!"))];
+        score_text = vec![stack!(cosmic::widget::text("No scores!"))];
     }
     scrollable(
         cosmic::widget::column()
@@ -35,7 +46,10 @@ pub fn draw_scores(scores: &[Score]) -> Element<AppMessage> {
     )
     .into()
 }
-fn draw_score(score: &Score) -> container::Container<'_, AppMessage, Theme> {
+fn draw_score<'a>(
+    score: &'a Score,
+    background: &'a Option<DynamicImage>,
+) -> cosmic::iced_widget::Stack<'a, AppMessage, Theme> {
     let mapset = score.mapset.as_ref().unwrap();
     let map = score.map.as_ref().unwrap();
     let title_diff: Element<AppMessage> = cosmic::widget::button::custom(
@@ -70,7 +84,18 @@ fn draw_score(score: &Score) -> container::Container<'_, AppMessage, Theme> {
             .width(Length::FillPortion(1))
             .height(Length::Fill)
     ];
-    container(col)
+    let bg = background.clone().unwrap();
+    let bytes: cosmic::iced::advanced::image::Bytes =
+        cosmic::iced::advanced::image::Bytes::from_owner(bg.clone().into_bytes());
+    let handle = Handle::from_rgba(bg.width(), bg.height(), bytes);
+    let img = cosmic::iced_widget::Image::new(handle);
+    // let img = if let Some(img) = background {
+    //     image(img)
+    // } else {
+    //     image(())
+    // };
+
+    let card = container(col)
         .class(Container::custom(|theme| {
             let cosmic = theme.cosmic();
             let corners = cosmic.corner_radii;
@@ -89,7 +114,9 @@ fn draw_score(score: &Score) -> container::Container<'_, AppMessage, Theme> {
             }
         }))
         .width(Length::Fill)
-        .height(Length::Fixed(100.0))
+        .height(Length::Fixed(100.0));
+    let bg = cosmic::iced_widget::stack!(img, card);
+    bg.into()
 }
 /// LIFETIME: Realistically - shares one with `App`
 pub(crate) fn draw_user<'u>(

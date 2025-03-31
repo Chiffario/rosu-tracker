@@ -1,10 +1,12 @@
 use crate::config::Config as AppConfig;
 use crate::gui::socket;
 use crate::setup::thread_init;
+use crate::utils::image::fetch_multiple;
 use cosmic::app::{context_drawer, Core, Task};
 use cosmic::cosmic_config::{self, Config, CosmicConfigEntry};
 use cosmic::iced::advanced::widget::{self};
 use cosmic::iced::alignment::{Horizontal, Vertical};
+use cosmic::iced::wgpu::naga::FastHashMap;
 use cosmic::iced::{Alignment, Length, Padding, Subscription};
 use cosmic::iced_widget::{column, row};
 use cosmic::prelude::CollectionWidget;
@@ -14,6 +16,7 @@ use cosmic::widget::text;
 use cosmic::widget::text::{title1, title3};
 use cosmic::widget::{container, icon, menu, nav_bar, scrollable, vertical_space};
 use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element, Theme};
+use image::DynamicImage;
 use rosu_v2::prelude::{Score, UserExtended};
 use std::collections::HashMap;
 use tracing::{debug, error};
@@ -51,6 +54,8 @@ pub struct AppModel {
     initial_user_extended: Option<Box<UserExtended>>,
     initial_user_tops: Option<Vec<Score>>,
     initial_user_firsts: Option<Vec<Score>>,
+    // In-memory background cover cache
+    backgrounds: FastHashMap<u32, Option<DynamicImage>>,
 }
 
 #[derive(Default)]
@@ -69,6 +74,7 @@ pub enum AppMessage {
     // StartServer(Vec<AbortHandle>),
     StartServer,
     ReceiveMessage(Event),
+    ReceiveBackground(u32, Option<DynamicImage>),
 }
 
 /// Create a COSMIC application from the app model
@@ -286,9 +292,16 @@ impl Application for AppModel {
                     Message::Tops(vec) => {
                         debug!("Top plays received: {}", vec.len());
                         self.user_tops = Some(vec.clone());
+                        let ids: Box<[u32]> = vec
+                            .iter()
+                            .map(|map| map.mapset.as_ref().unwrap().mapset_id)
+                            .filter(|id| self.backgrounds.contains_key(id))
+                            .collect();
                         if self.initial_user_tops.is_none() {
                             self.initial_user_tops = Some(vec);
                         }
+                        let stream = fetch_multiple(ids);
+                        return Task::stream(stream);
                     }
                     Message::Firsts(vec) => {
                         debug!("Firsts received: {}", vec.len());
@@ -303,6 +316,9 @@ impl Application for AppModel {
                     }
                 },
             },
+            AppMessage::ReceiveBackground(id, image) => {
+                self.backgrounds.insert(id, image);
+            }
         }
         Task::none()
     }
@@ -375,13 +391,22 @@ where
         }
     }
     fn tops_view(&self) -> Element<AppMessage> {
-        draw_scores(self.user_tops.as_ref().unwrap().as_slice())
+        draw_scores(
+            self.user_tops.as_ref().unwrap().as_slice(),
+            &self.backgrounds,
+        )
     }
     fn firsts_view(&self) -> Element<AppMessage> {
-        draw_scores(self.user_firsts.as_ref().unwrap().as_slice())
+        draw_scores(
+            self.user_firsts.as_ref().unwrap().as_slice(),
+            &self.backgrounds,
+        )
     }
     fn recent_view(&self) -> Element<AppMessage> {
-        draw_scores(self.user_recent.as_ref().unwrap().as_slice())
+        draw_scores(
+            self.user_recent.as_ref().unwrap().as_slice(),
+            &self.backgrounds,
+        )
     }
 }
 

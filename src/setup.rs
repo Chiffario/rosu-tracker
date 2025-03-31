@@ -63,6 +63,7 @@ pub async fn thread_init(config: Option<Api>) -> Result<()> {
     let osu_user_scores = osu.user_scores(&api_conf.username).limit(100);
     let osu_user_firsts = osu.user_scores(&api_conf.username).firsts();
     let osu_user_recent = osu.user_scores(&api_conf.username).recent().limit(20);
+
     let tracked_data: Arm<TrackedData> = Arc::new(Mutex::new(TrackedData::new()));
     let alt_clients = clients.clone();
     // Setup a thread to actually serve the data
