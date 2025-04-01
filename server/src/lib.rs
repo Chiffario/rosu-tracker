@@ -18,11 +18,12 @@ use tokio_tungstenite::{
 };
 use tracing::{debug, error};
 pub mod structs;
-use crate::{
-    constants::{BASE_IP, FIRSTS_ENDPOINT, RECENT_ENDPOINT, TOPS_ENDPOINT, USER_ENDPOINT},
-    setup::Api,
-};
+pub mod setup;
+
+use constants::{BASE_IP, FIRSTS_ENDPOINT, RECENT_ENDPOINT, TOPS_ENDPOINT, USER_ENDPOINT};
+use types::Api;
 use color_eyre::{eyre::Error, Result};
+use tokio_tungstenite::tungstenite::Utf8Bytes;
 use structs::*;
 
 #[tracing::instrument(name = "handle_clients", skip_all)]
@@ -60,14 +61,14 @@ pub async fn handle_clients(clients: Clients, values: Arm<TrackedData>) {
             }
 
             let res = match socket.kind {
-                WsKind::User => socket.client.send(Message::Text(ser_profile.clone())).await,
-                WsKind::Tops => socket.client.send(Message::Text(ser_tops.clone())).await,
-                WsKind::Firsts => socket.client.send(Message::Text(ser_firsts.clone())).await,
-                WsKind::Recent => socket.client.send(Message::Text(ser_recent.clone())).await,
+                WsKind::User => socket.client.send(Message::Text(Utf8Bytes::from(ser_profile.clone()))).await,
+                WsKind::Tops => socket.client.send(Message::Text(Utf8Bytes::from(ser_tops.clone()))).await,
+                WsKind::Firsts => socket.client.send(Message::Text(Utf8Bytes::from(ser_firsts.clone()))).await,
+                WsKind::Recent => socket.client.send(Message::Text(Utf8Bytes::from(ser_recent.clone()))).await,
             };
             debug!("Sent data to {:?}", socket);
             // Close the connection on error
-            // Panics are bad, leaving it as is is even worse
+            // Panics are bad, leaving it as it is even worse
             if let Err(e) = res {
                 println!("{:?}", e);
 

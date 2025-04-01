@@ -1,19 +1,23 @@
-[package]
-name = "rosu-tracker"
+[workspace]
+members = [
+  "rosu-tracker",
+  "constants",
+  "types",
+  "utils",
+  "server",
+  "tracker-cosmic"]
+resolver = "2"
+[workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
-[features]
-default = ["gui"]
-gui = []
-
-[dependencies]
+[workspace.dependencies]
 rosu-v2 = { git = "https://github.com/MaxOhn/rosu-v2", branch = "lazer", features = ["serialize"] }
 rosu-pp = { git = "https://github.com/MaxOhn/rosu-pp", branch = "main" }
-tokio-tungstenite = "0.24.0"
+tokio-tungstenite = "0.26.2"
 tokio = { version = "1.41.1", features = ["rt-multi-thread"] }
-serde = { version = "1.0.215" }
-serde_json = "1.0.133"
+serde = { version = "1.0.219" }
+serde_json = "1.0"
 hyper = { version = "1.6.0", features = ["server", "http1", "client"] }
 dotenvy = "0.15.7"
 toml = "0.8.19"
@@ -36,26 +40,27 @@ clap_complete = "4.5.42"
 hyper-rustls = "0.27.5"
 bytes = "1.10.0"
 image = "0.25.6"
-[dependencies.libcosmic]
+iced = { git = "https://github.com/iced-rs/iced.git", branch = "master" }
+[workspace.dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic.git"
 # See https://github.com/pop-os/libcosmic/blob/master/Cargo.toml for available features.
 features = [
-    # Accessibility support
-    "a11y",
-    # Uses cosmic-settings-daemon to watch for config file changes
-    # "dbus-config",
-    # Support creating additional application windows.
-    # "multi-window",
-    # On app startup, focuses an existing instance if the app is already open
-    "single-instance",
-    # Uses tokio as the executor for the runtime
-    "tokio",
-    # Windowing support for X11, Windows, Mac, & Redox
-    "winit",
-    # Add Wayland support to winit
-    "wayland",
-    # GPU-accelerated rendering
-    "wgpu",
+  # Accessibility support
+  "a11y",
+  # Uses cosmic-settings-daemon to watch for config file changes
+  # "dbus-config",
+  # Support creating additional application windows.
+  # "multi-window",
+  # On app startup, focuses an existing instance if the app is already open
+  "single-instance",
+  # Uses tokio as the executor for the runtime
+  "tokio",
+  # Windowing support for X11, Windows, Mac, & Redox
+  "winit",
+  # Add Wayland support to winit
+  "wayland",
+  # GPU-accelerated rendering
+  "wgpu",
 ]
 
 [profile.release]

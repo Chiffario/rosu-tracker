@@ -1,6 +1,6 @@
-use color_eyre::eyre::eyre;
-use color_eyre::Result;
-use cosmic::cosmic_config::{self, ConfigGet};
+use color_eyre::eyre::{Report, eyre};
+use color_eyre::{Result, eyre};
+// use cosmic::cosmic_config::{self, ConfigGet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -8,41 +8,12 @@ use rosu_v2::Osu;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 
-use crate::websocket::{
-    fetch_thread, handle_clients, server_thread,
-    structs::{Arm, Clients, TrackedData},
-};
+use crate::structs::{Arm, Clients, TrackedData};
+use crate::{fetch_thread, handle_clients, server_thread};
+use types::Api;
+use types::Either;
 
-#[derive(Deserialize, Serialize, Clone, Debug, Default)]
-pub struct Api {
-    pub id: String,
-    pub secret: String,
-    pub username: String,
-}
-
-fn get_config_cosmic() -> Result<Api> {
-    let config_handler =
-        cosmic_config::Config::new(crate::constants::APP_ID, crate::constants::CONFIG_VERSION)?;
-    Ok(Api {
-        id: config_handler.get::<String>("user_client")?,
-        secret: config_handler.get::<String>("user_secret")?,
-        username: config_handler.get::<String>("tracked_user_name")?,
-    })
-}
-
-pub fn set_cosmic_config(new_config: Api) -> () {
-    let config_handler =
-        cosmic_config::Config::new(crate::constants::APP_ID, crate::constants::CONFIG_VERSION)
-            .unwrap();
-    let mut config = crate::config::Config::default();
-    let _ = config.set_user_client(&config_handler, new_config.id);
-    let _ = config.set_user_secret(&config_handler, new_config.secret);
-    let _ = config.set_tracked_user_name(&config_handler, new_config.username);
-}
-pub async fn thread_init(config: Option<Api>) -> Result<()> {
-    if let Some(cfg) = config {
-        set_cosmic_config(cfg);
-    }
+pub async fn thread_init(config: Either<Api, fn() -> Result<Api>>) -> Result<()> {
     // Setup tracing
     let subscriber = tracing_subscriber::FmtSubscriber::builder()
         .with_target(false)
@@ -50,7 +21,10 @@ pub async fn thread_init(config: Option<Api>) -> Result<()> {
     tracing::subscriber::set_global_default(subscriber)?;
 
     let clients = Clients::default();
-    let api_conf = get_config_cosmic()?;
+    let api_conf = match config {
+        Either::Left(api) => api,
+        Either::Right(fun) => fun()?,
+    };
     // Prep empty websocket clients
     debug!("Constructed clients");
     let osu = Arc::new(

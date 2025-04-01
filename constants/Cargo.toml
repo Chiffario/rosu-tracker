@@ -1,0 +1,10 @@
+[package]
+name = "constants"
+version.workspace = true
+edition.workspace = true
+
+[features]
+gui = []
+
+[dependencies]
+constcat = { workspace = true }

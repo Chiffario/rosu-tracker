@@ -1,17 +1,7 @@
 use clap::{Arg, ArgGroup, ArgMatches, Command};
 use color_eyre::eyre::Result;
-use setup::Api;
-
-#[cfg(feature = "gui")]
-mod gui;
-
-mod utils;
-mod api;
-mod config;
-mod constants;
-mod setup;
-mod websocket;
-
+use tracker_cosmic::init_with_flags;
+use types::Api;
 fn generate_commands() -> Command {
     let mut command = Command::new("rosu-tracker").subcommand(
         Command::new("init")
@@ -30,7 +20,7 @@ Will override your previously saved settings if rerun! If ran without any flags,
             .group(ArgGroup::new("setup_flags").args(["username", "client_id", "client_secret"]).multiple(true).requires_all(["setup_flags"])),
     );
 
-    #[cfg(feature = "gui")]
+    #[cfg(feature = "cosmic")]
     {
         command = command.arg(Arg::new("gui"));
     }
@@ -71,7 +61,7 @@ fn cli_flag_handler(matches: ArgMatches) -> Option<Api> {
     None
 }
 
-#[cfg(not(feature = "gui"))]
+#[cfg(not(feature = "cosmic"))]
 #[tokio::main]
 async fn main() -> Result<()> {
     let command = generate_commands();
@@ -82,7 +72,7 @@ async fn main() -> Result<()> {
     tui_init(config).await
 }
 
-#[cfg(feature = "gui")]
+#[cfg(feature = "cosmic")]
 fn main() -> Result<()> {
     let command = generate_commands();
     let matches = command.get_matches();
@@ -92,14 +82,20 @@ fn main() -> Result<()> {
     gui_init(config)
 }
 
-#[cfg(not(feature = "gui"))]
+#[cfg(not(feature = "cosmic"))]
 async fn tui_init(config: Option<Api>) -> Result<()> {
-    thread_init(config).await?;
-    Ok(())
+    use color_eyre::eyre::Error;
+    use server::setup::thread_init;
+    use types::Either;
+
+    match config {
+        Some(c) => thread_init(Either::Left(c)).await,
+        None => Err(Error::msg("Failed to find configuration")),
+    }
 }
 
-#[cfg(feature = "gui")]
+#[cfg(feature = "cosmic")]
 fn gui_init(config: Option<Api>) -> Result<()> {
-    gui::init_with_flags(config)?;
+    init_with_flags(config)?;
     Ok(())
 }

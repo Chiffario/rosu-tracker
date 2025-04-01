@@ -1,8 +1,8 @@
 use crate::config::Config as AppConfig;
-use crate::gui::socket;
-use crate::setup::thread_init;
-use crate::utils::image::fetch_multiple;
-use cosmic::app::{context_drawer, Core, Task};
+use crate::config::get_config_cosmic;
+use crate::image_fetch::fetch_multiple;
+use crate::socket;
+use cosmic::app::{Core, Task, context_drawer};
 use cosmic::cosmic_config::{self, Config, CosmicConfigEntry};
 use cosmic::iced::advanced::widget::{self};
 use cosmic::iced::alignment::{Horizontal, Vertical};
@@ -15,11 +15,13 @@ use cosmic::widget::button::link;
 use cosmic::widget::text;
 use cosmic::widget::text::{title1, title3};
 use cosmic::widget::{container, icon, menu, nav_bar, scrollable, vertical_space};
-use cosmic::{cosmic_theme, theme, Application, ApplicationExt, Apply, Element, Theme};
+use cosmic::{Application, ApplicationExt, Apply, Element, Theme, cosmic_theme, theme};
 use image::DynamicImage;
 use rosu_v2::prelude::{Score, UserExtended};
+use server::setup::thread_init;
 use std::collections::HashMap;
 use tracing::{debug, error};
+use types::Either;
 
 use super::components::{draw_scores, draw_user};
 use super::socket::{Event, Message};
@@ -88,7 +90,7 @@ impl Application for AppModel {
     type Message = AppMessage;
 
     /// Unique identifier in RDNN (reverse domain name notation) format.
-    const APP_ID: &'static str = crate::constants::APP_ID;
+    const APP_ID: &'static str = constants::APP_ID;
 
     fn core(&self) -> &Core {
         &self.core
@@ -160,8 +162,8 @@ impl Application for AppModel {
         let rename = app.update_title();
 
         // Create a startup command that starts the socket server.
-        let command = Task::perform(thread_init(None), |_| {
-            cosmic::app::Message::App(AppMessage::StartServer)
+        let command = Task::perform(thread_init(Either::Right(get_config_cosmic)), |_| {
+            cosmic::action::Action::App(AppMessage::StartServer)
         });
 
         let batch = Task::batch([rename, command]);
@@ -247,7 +249,7 @@ impl Application for AppModel {
     fn update(&mut self, message: Self::Message) -> Task<Self::Message> {
         match message {
             AppMessage::OpenRepositoryUrl => {
-                _ = open::that_detached("");
+                // open::that_detached("https://github.com/Chiffario/rosu-tracker");
             }
 
             AppMessage::ToggleContextPage(context_page) => {
@@ -265,12 +267,13 @@ impl Application for AppModel {
                 self.config = config;
             }
 
-            AppMessage::LaunchUrl(url) => match open::that_detached(&url) {
-                Ok(()) => {}
-                Err(err) => {
-                    eprintln!("failed to open {url:?}: {err}");
-                }
-            },
+            // AppMessage::LaunchUrl(url) => match open::that_detached(&url) {
+            //     Ok(()) => {}
+            //     Err(err) => {
+            //         eprintln!("failed to open {url:?}: {err}");
+            //     }
+            // },
+            AppMessage::LaunchUrl(_) => {}
             AppMessage::StartServer => tracing::debug!("Iced: Started websocket server"),
             AppMessage::ReceiveMessage(event) => match event {
                 Event::Connected(_connection) => {
@@ -391,22 +394,25 @@ where
         }
     }
     fn tops_view(&self) -> Element<AppMessage> {
-        draw_scores(
-            self.user_tops.as_ref().unwrap().as_slice(),
-            &self.backgrounds,
-        )
+        if let Some(scores) = &self.user_tops {
+            draw_scores(scores.as_slice(), &self.backgrounds)
+        } else {
+            text("Waiting for scores :D").into()
+        }
     }
     fn firsts_view(&self) -> Element<AppMessage> {
-        draw_scores(
-            self.user_firsts.as_ref().unwrap().as_slice(),
-            &self.backgrounds,
-        )
+        if let Some(scores) = &self.user_firsts {
+            draw_scores(scores.as_slice(), &self.backgrounds)
+        } else {
+            text("Waiting for scores :D").into()
+        }
     }
     fn recent_view(&self) -> Element<AppMessage> {
-        draw_scores(
-            self.user_recent.as_ref().unwrap().as_slice(),
-            &self.backgrounds,
-        )
+        if let Some(scores) = &self.user_recent {
+            draw_scores(scores.as_slice(), &self.backgrounds)
+        } else {
+            text("Waiting for scores :D").into()
+        }
     }
 }
 

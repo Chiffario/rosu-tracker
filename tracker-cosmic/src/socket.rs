@@ -1,7 +1,7 @@
 use cosmic::iced::{
     futures::{
-        channel::mpsc::{self},
         SinkExt,
+        channel::mpsc::{self},
     },
     stream,
 };
@@ -9,9 +9,9 @@ use futures_util::{Stream, StreamExt};
 use rosu_v2::prelude::{Score, UserExtended};
 use serde::Deserialize;
 use tokio::net::TcpStream;
-use tokio_tungstenite::{connect_async, MaybeTlsStream, WebSocketStream};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 
-use crate::constants::{FIRSTS_URI, RECENT_URI, TOPS_URI, USER_URI};
+use constants::{FIRSTS_URI, RECENT_URI, TOPS_URI, USER_URI};
 
 /// Create a stream of `UserExtended` messages
 pub fn connect_user() -> impl Stream<Item = Event> {

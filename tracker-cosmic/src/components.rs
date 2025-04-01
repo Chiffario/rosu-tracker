@@ -8,9 +8,9 @@ use cosmic::iced_widget::{column, row, stack};
 use cosmic::prelude::CollectionWidget;
 use cosmic::theme::Container;
 use cosmic::widget::text::{title1, title3};
-use cosmic::widget::{container, scrollable, vertical_space, Image};
+use cosmic::widget::{Image, container, scrollable, vertical_space};
 use cosmic::widget::{image, text};
-use cosmic::{theme, Element, Theme};
+use cosmic::{Element, Theme, theme};
 use rosu_v2::prelude::{Score, UserExtended};
 
 use super::app::AppMessage;
@@ -24,7 +24,7 @@ pub fn draw_scores<'a>(
         .map(|score| {
             let bg = background
                 .get(&score.mapset.as_ref().unwrap().mapset_id)
-                .unwrap();
+                .unwrap_or(&None);
             draw_score(score, bg)
         })
         .collect::<Vec<_>>();
@@ -84,16 +84,11 @@ fn draw_score<'a>(
             .width(Length::FillPortion(1))
             .height(Length::Fill)
     ];
-    let bg = background.clone().unwrap();
-    let bytes: cosmic::iced::advanced::image::Bytes =
-        cosmic::iced::advanced::image::Bytes::from_owner(bg.clone().into_bytes());
-    let handle = Handle::from_rgba(bg.width(), bg.height(), bytes);
-    let img = cosmic::iced_widget::Image::new(handle);
-    // let img = if let Some(img) = background {
-    //     image(img)
-    // } else {
-    //     image(())
-    // };
+    let bg: Option<Image> = background
+        .clone()
+        .map(<DynamicImage>::into_bytes)
+        .map(Handle::from_bytes)
+        .map(Image::new);
 
     let card = container(col)
         .class(Container::custom(|theme| {
@@ -115,7 +110,7 @@ fn draw_score<'a>(
         }))
         .width(Length::Fill)
         .height(Length::Fixed(100.0));
-    let bg = cosmic::iced_widget::stack!(img, card);
+    let bg = cosmic::iced_widget::Stack::new().push_maybe(bg).push(card);
     bg.into()
 }
 /// LIFETIME: Realistically - shares one with `App`
